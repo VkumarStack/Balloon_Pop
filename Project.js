@@ -557,9 +557,9 @@ export class Project extends Scene {
         program_state.projection_transform = Mat4.perspective(Math.PI / 4, context.width / context.height, 0.5, 500);
         this.render_scene(context, program_state, true,true, true);
 
-        // Step 3: display the textures
         /*
-        this.shapes.square_2d.draw(context, program_state,
+        // Step 3: display the textures
+        this.shapes.ground.draw(context, program_state,
             Mat4.translation(-.99, .08, 0).times(
             Mat4.scale(0.5, 0.5 * gl.canvas.width / gl.canvas.height, 1)
             ),
