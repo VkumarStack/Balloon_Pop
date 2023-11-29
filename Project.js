@@ -41,7 +41,7 @@ class Movement extends defs.Movement_Controls {
         canvas.addEventListener( "mouseout",  e => { if( !this.mouse.anchor ) this.mouse.from_center.scale_by(0) } );
 
         canvas.onclick = () => canvas.requestPointerLock();
-
+        
         let updatePosition = (e) => {
             dx = e.movementX;
             dy = e.movementY;
@@ -124,7 +124,7 @@ class Movement extends defs.Movement_Controls {
 // to appropriately bound the object itself
 class Collidable {
     constructor(matrix, size) {
-        this.collidedObjects = []; // Keeps track of all other objects that have collided with this object
+        this.collidedObjects = new Set(); // Keeps track of all other objects that have collided with this object
         this.matrix = matrix;
         this.size = size; // Size is a scale matrix; if the bound is a box then this represents the dimensions of the box otherwise if the bound is a sphere
         // it represents the radius
@@ -189,15 +189,9 @@ class Collidable {
         }
         // Add the collided object to the list of collided objects (and this object to the other object's list of collided objects)
         if (test) {
-            let found = false;
-            for (let i = 0; i < this.collidedObjects.length; i++) {
-                if (this.collidedObjects[i] == other)
-                    found = true
-            }
-            if (!found)
-            {
-                this.collidedObjects.push(other);
-                other.collidedObjects.push(this);
+            if (!this.collidedObjects.has(other)) {
+                this.collidedObjects.add(other);
+                other.collidedObjects.add(this);
             }
         }
 
@@ -337,7 +331,7 @@ class Balloon extends Collidable {
                 collided = true;
             }
         })
-        this.shape.draw(context, program_state, this.matrix.times(this.size), shadow_pass ? this.material.override(BALLOON_HEALTH[this.durability - this.collidedObjects.length]) : this.shadow)
+        this.shape.draw(context, program_state, this.matrix.times(this.size), shadow_pass ? this.material.override(BALLOON_HEALTH[this.durability - this.collidedObjects.size]) : this.shadow)
     }
 }
 
@@ -653,7 +647,7 @@ export class Project extends Scene {
         console.time("Draws projectiles")
         for (let i = 0; i < this.projectiles.length; i++)
         {
-            if (this.projectiles[i].collidedObjects.length == 0 && !this.projectiles[i].out_of_bounds)
+            if (this.projectiles[i].collidedObjects.size == 0 && !this.projectiles[i].out_of_bounds)
                 this.projectiles[i].draw(context, program_state, dt, shadow_pass)
             else
             {
@@ -667,7 +661,7 @@ export class Project extends Scene {
         console.log("# Balloons: %d", this.balloons.length)
         for (let i = 0; i < this.balloons.length; i++)
         {
-            if (this.balloons[i].collidedObjects.length < this.balloons[i].durability)
+            if (this.balloons[i].collidedObjects.size < this.balloons[i].durability)
                 this.balloons[i].draw(context, program_state, dt, this.projectiles, shadow_pass)
             else
             {
@@ -712,7 +706,7 @@ export class Project extends Scene {
 
         for (let i = 0; i < this.projectiles.length; i++)
         {
-            if (this.projectiles[i].collidedObjects.length == 0 && !this.projectiles[i].out_of_bounds)
+            if (this.projectiles[i].collidedObjects.size == 0 && !this.projectiles[i].out_of_bounds)
                 this.projectiles[i].draw(context, program_state, dt)
             else
             {
@@ -723,7 +717,7 @@ export class Project extends Scene {
         
         for (let i = 0; i < this.balloons.length; i++)
         {
-            if (this.balloons[i].collidedObjects.length < this.balloons[i].durability)
+            if (this.balloons[i].collidedObjects.size < this.balloons[i].durability)
                 this.balloons[i].draw(context, program_state, dt, this.projectiles)
             else
             {
