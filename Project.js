@@ -9,6 +9,8 @@ const {
 
 const {Cube, Axis_Arrows, Textured_Phong, Subdivision_Sphere, Phong_Shader, Cone_Tip, Square} = defs
 
+const white = new Material(new defs.Basic_Shader())
+
 // Mouse movements
 let dx = 0;
 let dy = 0;
@@ -335,17 +337,36 @@ class Balloon extends Collidable {
 }
 
 class Nature extends Collidable {
-    constructor(matrix, size, shape, material, shadow)
+    constructor(matrix, size, shape, material, shadow, boundOffset = Mat4.identity())
     {
         super(matrix, size);
         this.shape = shape;
         this.material = material;
         this.shadow = shadow;
+        this.boundOffset = boundOffset;
+        this.updateBoundBox()
     }
 
+    updateBoundBox() {
+        if (this.boundOffset)
+        {
+            this.min_x = this.matrix[0][3] - this.size[0][0] - (this.boundOffset[0][3] * this.size[0][0]);
+            this.max_x = this.matrix[0][3] + this.size[0][0] - (this.boundOffset[0][3] * this.size[0][0]);
+            this.min_y = this.matrix[1][3] - this.size[1][1] - (this.boundOffset[1][3] * this.size[1][1]);
+            this.max_y = this.matrix[1][3] + this.size[1][1] - (this.boundOffset[1][3] * this.size[1][1]);
+            this.min_z = this.matrix[2][3] - this.size[2][2] - (this.boundOffset[2][3] * this.size[2][2]);
+            this.max_z = this.matrix[2][3] + this.size[2][2] - (this.boundOffset[2][3] * this.size[2][2]);
+        }
+    }
+
+
     // Check for collision with projectiles
-    draw(context, program_state, collidables, shadow_pass)
+    draw(context, program_state, collidables, shadow_pass, boundBox = null, boundBoxMaterial = null)
     {
+        if (boundBox !== null)
+        {
+            boundBox.draw(context, program_state, Mat4.translation((this.min_x + this.max_x) / 2, (this.min_y + this.max_y) / 2, (this.min_z + this.max_z) / 2).times(this.size), white, "LINES")
+        }
         // Check the collision to update the collided object index for darts
         collidables.forEach((collidable) => {
             this.checkCollision(collidable);
@@ -370,13 +391,35 @@ function drawSkybox(context, program_state, shape, materials, shadow_pass) {
     }
 }
 
+
+// Debugging
+class Cube_Outline extends Shape {
+    constructor() {
+        super("position", "color");
+        //  TODO (Requirement 5).
+        // When a set of lines is used in graphics, you should think of the list entries as
+        // broken down into pairs; each pair of vertices will be drawn as a line segment.
+        // Note: since the outline is rendered with Basic_shader, you need to redefine the position and color of each vertex
+        const white = color(1, 1, 1, 1);
+        this.arrays.position = Vector3.cast(
+            [1, -1, 1], [1, -1, -1], [1, -1, 1], [-1, -1, 1], [-1, -1, 1], [-1, -1, -1], [-1, -1, -1], [1, -1, -1], // bottom vertices 
+            [1, 1, 1], [1, 1, -1], [1, 1, 1], [-1, 1, 1], [-1, 1, 1], [-1, 1, -1], [-1, 1, -1], [1, 1, -1], // top vertices
+            [1, -1, 1], [1, 1, 1], [1, -1, -1], [1, 1, -1], [-1, -1, 1], [-1, 1, 1], [-1, -1, -1], [-1, 1, -1] // bottom-top connection vertices
+        );
+        for (let i = 0; i < this.arrays.position.length; i++) {
+            this.arrays.color.push(white);
+        }
+        this.indices = false;
+    }
+}
+
 export class Project extends Scene {
     constructor() {
         super();
         this.shapes = {
             projectile: new defs.Cone_Tip(5, 5),
             sphere: new Subdivision_Sphere(4),
-            bounding_box: new Cube(),
+            bounding_box: new Cube_Outline(),
             ground: new Cube(),
             square: new Square(),
             tree: new Shape_From_File("assets/CommonTree_1.obj"),
@@ -395,7 +438,7 @@ export class Project extends Scene {
                 color: hex_color("#0000FF"), ambient: 0.5, specularity: 1.0
             }),
             bound_box: new Material(new Phong_Shader(), {
-                color: hex_color("#0000FF"), ambient: 1.0, diffusivity: 1.0,
+                color: hex_color("#FFFFFF", 0.1), ambient: 1.0, diffusivity: 1.0,
             }),
             terrain: new Material(new Shadow_Textured_Phong_Shader(1), {
                 color: hex_color("#009a17"), ambient: .3, diffusivity: 0.6, specularity: 0, smoothness: 64,
@@ -494,18 +537,18 @@ export class Project extends Scene {
         this.projectiles = [];
         this.balloons = []
         this.nature = [
-            new Nature(Mat4.translation(25, 8, -60).times(Mat4.scale(4, 4, 4)), Mat4.scale(2, 10, 2), this.shapes.tree, this.materials.tree, this.materials.shadow), 
-            new Nature(Mat4.translation(10, 14, -75).times(Mat4.scale(6.5, 7, 5)).times(Mat4.rotation(Math.PI / 2, 0, 1, 0)), Mat4.scale(2, 15, 2), this.shapes.tree, this.materials.tree, this.materials.shadow), 
-            new Nature(Mat4.translation(0, 8, -45).times(Mat4.scale(5, 5, 5)).times(Mat4.rotation(Math.PI / 4, 0, 1, 0)), Mat4.scale(2, 10, 2), this.shapes.willow, this.materials.willow, this.materials.shadow),
-            new Nature(Mat4.translation(25, 10, 0).times(Mat4.scale(5, 5, 5)).times(Mat4.rotation(Math.PI / 4, 0, 1, 0)), Mat4.scale(2, 10, 2), this.shapes.birch, this.materials.birch, this.materials.shadow),
-            new Nature(Mat4.translation(-20, 12, -70).times(Mat4.scale(5, 5, 5)).times(Mat4.rotation(Math.PI, 0, 1, 0)), Mat4.scale(2.4, 12, 2), this.shapes.tree2, this.materials.tree2, this.materials.shadow),
-            new Nature(Mat4.translation(-20, 13, -40).times(Mat4.scale(5, 5, 5)).times(Mat4.rotation(Math.PI / 2, 0, 1, 0)), Mat4.scale(2.4, 12, 2), this.shapes.tree3, this.materials.tree3, this.materials.shadow),
-            new Nature(Mat4.translation(45, 13, -65).times(Mat4.scale(5, 5, 5)).times(Mat4.rotation(Math.PI / 2, 0, 1, 0)), Mat4.scale(2.4, 12, 2), this.shapes.tree4, this.materials.tree4, this.materials.shadow),
-            new Nature(Mat4.translation(30, 13, -45).times(Mat4.scale(5, 5, 5)).times(Mat4.rotation(Math.PI / 2, 0, 1, 0)), Mat4.scale(2.4, 12, 2), this.shapes.tree5, this.materials.tree5, this.materials.shadow),
-            new Nature(Mat4.translation(-85, 5, -85).times(Mat4.scale(10, 10, 10)).times(Mat4.rotation(Math.PI / 4, 0, 1, 0)), Mat4.scale(10, 6, 11), this.shapes.rock, this.materials.rock, this.materials.shadow),
-            new Nature(Mat4.translation(-50, 1, -50).times(Mat4.scale(8, 16, 12)).times(Mat4.rotation(Math.PI / 2, 0, 1, 0)), Mat4.scale(10, 16, 11), this.shapes.rock, this.materials.rock2, this.materials.shadow), 
-            new Nature(Mat4.translation(-50, 18, -50).times(Mat4.scale(8, 4, 10)).times(Mat4.rotation(Math.PI / 2, 0, 1, 0)), Mat4.scale(10, 6, 11), this.shapes.rock, this.materials.rock2, this.materials.shadow),
-            new Nature(Mat4.translation(0, -0.1, 50), Mat4.scale(0.8, 1, 2.5), this.shapes.log, this.materials.log, this.materials.shadow)
+            new Nature(Mat4.translation(25, 8, -60).times(Mat4.scale(4, 4, 4)), Mat4.scale(1, 4, 1), this.shapes.tree, this.materials.tree, this.materials.shadow, Mat4.translation(0, 1.2, 1)), 
+            new Nature(Mat4.translation(10, 14, -75).times(Mat4.scale(6.5, 7, 5)).times(Mat4.rotation(Math.PI / 2, 0, 1, 0)), Mat4.scale(1, 3.8, 1), this.shapes.tree, this.materials.tree, this.materials.shadow, Mat4.translation(1.5, 2.95, 0)), 
+            new Nature(Mat4.translation(0, 8, -45).times(Mat4.scale(5, 5, 5)).times(Mat4.rotation(Math.PI / 4, 0, 1, 0)), Mat4.scale(1, 4.7, 1), this.shapes.willow, this.materials.willow, this.materials.shadow, Mat4.translation(1.5, 0.9, 0.8)),
+            new Nature(Mat4.translation(25, 10, 0).times(Mat4.scale(5, 5, 5)).times(Mat4.rotation(Math.PI / 4, 0, 1, 0)), Mat4.scale(1, 5.5, 1), this.shapes.birch, this.materials.birch, this.materials.shadow, Mat4.translation(1.7, 1, 2)),
+            new Nature(Mat4.translation(-20, 12, -70).times(Mat4.scale(5, 5, 5)).times(Mat4.rotation(Math.PI, 0, 1, 0)), Mat4.scale(1, 7, 1), this.shapes.tree2, this.materials.tree2, this.materials.shadow, Mat4.translation(0.5, 0.85, -3)),
+            new Nature(Mat4.translation(-20, 13, -40).times(Mat4.scale(5, 5, 5)).times(Mat4.rotation(Math.PI / 2, 0, 1, 0)), Mat4.scale(1, 5.5, 1), this.shapes.tree3, this.materials.tree3, this.materials.shadow, Mat4.translation(0, 1.5, 1,)),
+            new Nature(Mat4.translation(45, 13, -65).times(Mat4.scale(5, 5, 5)).times(Mat4.rotation(Math.PI / 2, 0, 1, 0)), Mat4.scale(1.05, 6, 1), this.shapes.tree4, this.materials.tree4, this.materials.shadow, Mat4.translation(-1.65, 1.3, 1.6)),
+            new Nature(Mat4.translation(30, 13, -45).times(Mat4.scale(5, 5, 5)).times(Mat4.rotation(Math.PI / 2, 0, 1, 0)), Mat4.scale(1, 7, 1.2), this.shapes.tree5, this.materials.tree5, this.materials.shadow, Mat4.translation(3, 1, 0.9)),
+            new Nature(Mat4.translation(-85, 5, -85).times(Mat4.scale(10, 10, 10)).times(Mat4.rotation(Math.PI / 4, 0, 1, 0)), Mat4.scale(13, 7, 12.5), this.shapes.rock, this.materials.rock, this.materials.shadow, Mat4.translation(0.1, -0.2, -0.05,)),
+            new Nature(Mat4.translation(-50, 1, -50).times(Mat4.scale(8, 16, 12)).times(Mat4.rotation(Math.PI / 2, 0, 1, 0)), Mat4.scale(7., 7.8, 9.5), this.shapes.rock, this.materials.rock2, this.materials.shadow, Mat4.translation(-0.1, -0.8, -0.2,)), 
+            new Nature(Mat4.translation(-50, 18, -50).times(Mat4.scale(8, 4, 10)).times(Mat4.rotation(Math.PI / 2, 0, 1, 0)), Mat4.scale(8, 2, 9), this.shapes.rock, this.materials.rock2, this.materials.shadow, Mat4.translation(-0.2, 0, -0.2)),
+            new Nature(Mat4.translation(0, -0.1, 50), Mat4.scale(0.5, 0.6, 2), this.shapes.log, this.materials.log, this.materials.shadow, Mat4.translation(0, -0.1, -0.4))
         ];
         player = new Player(Mat4.translation(...INITIAL_POSITION), this.nature)
 
@@ -660,7 +703,7 @@ export class Project extends Scene {
         } 
 
         this.nature.forEach((nature) => {
-            nature.draw(context, program_state, this.projectiles, shadow_pass)
+            nature.draw(context, program_state, this.projectiles, shadow_pass, this.shapes.bounding_box, this.materials.bound_box)
         })
 
         drawTerrain(context, program_state, this.shapes.ground, shadow_pass ? this.materials.terrain : this.materials.pure);
