@@ -43,7 +43,7 @@ class Movement extends defs.Movement_Controls {
         canvas.addEventListener( "mouseout",  e => { if( !this.mouse.anchor ) this.mouse.from_center.scale_by(0) } );
 
         canvas.onclick = () => canvas.requestPointerLock();
-
+        
         let updatePosition = (e) => {
             dx = e.movementX;
             dy = e.movementY;
@@ -97,6 +97,7 @@ class Movement extends defs.Movement_Controls {
     }
 
     display (context, graphics_state, dt= graphics_state.animation_delta_time / 1000) {
+        console.time("Movement display")
         const m  = this.speed_multiplier * this.meters_per_frame,
               r  = this.speed_multiplier * this.radians_per_frame
 
@@ -114,6 +115,7 @@ class Movement extends defs.Movement_Controls {
         this.first_person_flyaround (dt * r, dt * m);
         if (!this.mouse.anchor)
             this.third_person_arcball(dt * r);
+        console.timeEnd("Movement display")
     }
 }
 
@@ -124,7 +126,7 @@ class Movement extends defs.Movement_Controls {
 // to appropriately bound the object itself
 class Collidable {
     constructor(matrix, size) {
-        this.collidedObjects = []; // Keeps track of all other objects that have collided with this object
+        this.collidedObjects = new Set(); // Keeps track of all other objects that have collided with this object
         this.matrix = matrix;
         this.size = size; // Size is a scale matrix; if the bound is a box then this represents the dimensions of the box otherwise if the bound is a sphere
         // it represents the radius
@@ -148,6 +150,8 @@ class Collidable {
     }
 
     checkCollision(other) {
+        console.time("Collision checking")
+
         let test;
         if (this.boundingBox && other.boundingBox) // Box-Box collision
         {
@@ -187,17 +191,14 @@ class Collidable {
         }
         // Add the collided object to the list of collided objects (and this object to the other object's list of collided objects)
         if (test) {
-            let found = false;
-            for (let i = 0; i < this.collidedObjects.length; i++) {
-                if (this.collidedObjects[i] == other)
-                    found = true
-            }
-            if (!found)
-            {
-                this.collidedObjects.push(other);
-                other.collidedObjects.push(this);
+            if (!this.collidedObjects.has(other)) {
+                this.collidedObjects.add(other);
+                other.collidedObjects.add(this);
             }
         }
+
+        console.timeEnd("Collision checking")
+
         return test;
     }
 }
@@ -332,7 +333,7 @@ class Balloon extends Collidable {
                 collided = true;
             }
         })
-        this.shape.draw(context, program_state, this.matrix.times(this.size), shadow_pass ? this.material.override(BALLOON_HEALTH[this.durability - this.collidedObjects.length]) : this.shadow)
+        this.shape.draw(context, program_state, this.matrix.times(this.size), shadow_pass ? this.material.override(BALLOON_HEALTH[this.durability - this.collidedObjects.size]) : this.shadow)
     }
 }
 
@@ -376,11 +377,14 @@ class Nature extends Collidable {
 }
 
 function drawTerrain(context, program_state, shape, material) {
+    console.time("Draws terrain")
     // Have the terrain by a large cube with its top face being stood on
     shape.draw(context, program_state, Mat4.translation(0, -2, 0).times(Mat4.scale(100, 1, 100)), material);
+    console.timeEnd("Draws terrain")
 }
 
 function drawSkybox(context, program_state, shape, materials, shadow_pass) {
+    console.time("Draws skybox")
     if (shadow_pass)
     {
         shape.draw(context, program_state, Mat4.translation(0, 100, 0).times(Mat4.scale(100, 1, 100)).times(Mat4.rotation(Math.PI / 2, 1, 0 ,0)), materials[0])
@@ -389,6 +393,7 @@ function drawSkybox(context, program_state, shape, materials, shadow_pass) {
         shape.draw(context, program_state, Mat4.translation(100, 0, 0).times(Mat4.rotation(-Math.PI / 2, 0, 1, 0)).times(Mat4.scale(100, 100, 1)), materials[3])
         shape.draw(context, program_state, Mat4.translation(0, 0, 100).times(Mat4.scale(100, 100, 1)).times(Mat4.rotation(Math.PI, 0, 1, 0)), materials[4])
     }
+    console.timeEnd("Draws skybox")
 }
 
 
@@ -674,15 +679,18 @@ export class Project extends Scene {
 
         program_state.draw_shadow = draw_shadow;
 
+        console.time("Draws light-src")
         if (draw_light_source && shadow_pass) {
             this.shapes.sphere.draw(context, program_state,
                 Mat4.translation(light_position[0], light_position[1], light_position[2]).times(Mat4.scale(1,1,1)),
                 this.materials.light_src.override({color: hex_color("#FC9601")}));
         }
+        console.timeEnd("Draws light-src")
 
+        console.time("Draws projectiles")
         for (let i = 0; i < this.projectiles.length; i++)
         {
-            if (this.projectiles[i].collidedObjects.length == 0 && !this.projectiles[i].out_of_bounds)
+            if (this.projectiles[i].collidedObjects.size == 0 && !this.projectiles[i].out_of_bounds)
                 this.projectiles[i].draw(context, program_state, dt, shadow_pass)
             else
             {
@@ -690,21 +698,29 @@ export class Project extends Scene {
                 i--;
             }
         }
+        console.timeEnd("Draws projectiles")
         
+        console.time("Draws balloons")
+        console.log("# Balloons: %d", this.balloons.length)
         for (let i = 0; i < this.balloons.length; i++)
         {
-            if (this.balloons[i].collidedObjects.length < this.balloons[i].durability)
+            if (this.balloons[i].collidedObjects.size < this.balloons[i].durability)
                 this.balloons[i].draw(context, program_state, dt, this.projectiles, shadow_pass)
             else
             {
+                console.time("Balloons Array Splicing")
                 this.balloons.splice(i, 1);
                 i--;
+                console.timeEnd("Balloons Array Splicing")
             }
         } 
+        console.timeEnd("Draws balloons")
 
+        console.time("Draws natures")
         this.nature.forEach((nature) => {
             nature.draw(context, program_state, this.projectiles, shadow_pass, this.shapes.bounding_box, this.materials.bound_box)
         })
+        console.timeEnd("Draws natures")
 
         drawTerrain(context, program_state, this.shapes.ground, shadow_pass ? this.materials.terrain : this.materials.pure);
         drawSkybox(context, program_state, this.shapes.square, [this.materials.skybox_top, this.materials.skybox_front, this.materials.skybox_left, this.materials.skybox_right, this.materials.skybox_back], shadow_pass );
@@ -733,7 +749,7 @@ export class Project extends Scene {
 
         for (let i = 0; i < this.projectiles.length; i++)
         {
-            if (this.projectiles[i].collidedObjects.length == 0 && !this.projectiles[i].out_of_bounds)
+            if (this.projectiles[i].collidedObjects.size == 0 && !this.projectiles[i].out_of_bounds)
                 this.projectiles[i].draw(context, program_state, dt)
             else
             {
@@ -744,7 +760,7 @@ export class Project extends Scene {
         
         for (let i = 0; i < this.balloons.length; i++)
         {
-            if (this.balloons[i].collidedObjects.length < this.balloons[i].durability)
+            if (this.balloons[i].collidedObjects.size < this.balloons[i].durability)
                 this.balloons[i].draw(context, program_state, dt, this.projectiles)
             else
             {
@@ -762,6 +778,8 @@ export class Project extends Scene {
     */
 
     display(context, program_state) {
+        console.time("Initialization")
+
         if (!context.scratchpad.controls) {
             this.children.push(context.scratchpad.controls = new Movement());
             origin = INITIAL_POSITION;
@@ -769,6 +787,8 @@ export class Project extends Scene {
 
         let t = program_state.animation_time / 1000, dt = program_state.animation_delta_time / 1000;
         const gl = context.context;
+
+        console.log(1 / dt)
 
         if (!this.init_ok) {
             const ext = gl.getExtension('WEBGL_depth_texture');
@@ -797,6 +817,11 @@ export class Project extends Scene {
 
         program_state.lights = [new Light(this.light_position, this.light_color, 100000)];
 
+        console.timeEnd("Initialization")
+
+
+        console.time("Step 1")
+
         // Step 1: set the perspective and camera to the POV of light
         const light_view_mat = Mat4.look_at(
             vec3(this.light_position[0], this.light_position[1], this.light_position[2]),
@@ -814,14 +839,19 @@ export class Project extends Scene {
         program_state.light_tex_mat = light_proj_mat;
         program_state.view_mat = light_view_mat;
         program_state.projection_transform = light_proj_mat;
-        this.render_scene(context, program_state, false,false, false);
+        this.render_scene(context, program_state, false, false, false);
+
+        console.timeEnd("Step 1")
+        console.time("Step 2")
 
         // Step 2: unbind, draw to the canvas
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
         program_state.view_mat = program_state.camera_inverse;
         program_state.projection_transform = Mat4.perspective(Math.PI / 4, context.width / context.height, 0.5, 500);
-        this.render_scene(context, program_state, true,true, true);
+        this.render_scene(context, program_state, true, true, true);
+
+        console.timeEnd("Step 2")
 
         /*
         // Step 3: display the textures
