@@ -120,8 +120,21 @@ function isFiring(landmarks) {
     })
 
     return distance * 100 <= 1
-
 }
+
+function isFiringAlternate(landmarks) {
+    let middleFingerTip = landmarks[0][12]
+    let middleFingerMCP = landmarks[0][9]
+    let wrist = landmarks[0][0]
+    let MCPlength = 0;
+    let tipLength = 0;
+    Object.keys(middleFingerTip).forEach((key) => {
+        MCPlength += (middleFingerMCP[key] - wrist[key])**2
+        tipLength += (middleFingerTip[key] - wrist[key])**2
+    })
+   return Math.sqrt(tipLength) / Math.sqrt(MCPlength) <= 1.0
+}
+
 
 let lastVideoTime = -1;
 let results = undefined;
@@ -138,6 +151,7 @@ async function predictWebcam(shootFunction) {
   }
   if (results.landmarks.length != 0) {
     const index = results.landmarks[0]["8"]
+    isFiringAlternate(results.landmarks)
     if (isFiring(results.landmarks))
     {   
         shootFunction()
