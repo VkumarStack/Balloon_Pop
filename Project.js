@@ -606,6 +606,30 @@ function drawSkybox(context, program_state, shape, materials, shadow_pass) {
 }
 
 
+function drawWall(context, program_state, shape, wallMaterial, wallDimensions, textureScale = 1) {
+    const [wallWidth, wallHeight, wallDepth] = wallDimensions;
+    const skyboxBoundary = 100;
+    const halfDepth = wallDepth / 2; // Half depth of the wall for proper alignment
+
+    // Calculate positions for each wall segment
+    const positions = [
+        { position: Mat4.translation(skyboxBoundary, wallHeight/3 , 100), rotation: 0 }, // Left wall
+        { position: Mat4.translation(skyboxBoundary, wallHeight / 3, -100), rotation: 0 }, // Right wall
+        { position: Mat4.translation(100, wallHeight / 3, skyboxBoundary), rotation: Math.PI / 2 }, // Front wall
+        { position: Mat4.translation(-100, wallHeight / 3, skyboxBoundary), rotation: -Math.PI / 2 }, // Back wall
+    ];
+
+    // Draw each wall segment
+    positions.forEach(pos => {
+        const scale = Mat4.scale(2 * skyboxBoundary * textureScale, wallHeight / 2, halfDepth);
+        const transformation = pos.position.times(Mat4.rotation(pos.rotation, 0, 1, 0)).times(scale);
+        console.time("Draws Walls")
+        shape.draw(context, program_state, transformation, wallMaterial);
+        console.timeEnd("Draws Walls")
+    });
+}
+
+
 // Debugging
 class Cube_Outline extends Shape {
     constructor() {
@@ -627,6 +651,19 @@ class Cube_Outline extends Shape {
     }
 }
 
+
+class ZoomedOutTextureCube extends Cube {
+    constructor() {
+        super(); // Call the constructor of the Cube class
+
+        this.arrays.texture_coord = [
+            ...this.arrays.texture_coord.map(coord => vec(coord[0] *2, coord[1] *10))
+        ];
+    }
+}
+
+
+
 export class Project extends Scene {
     constructor() {
         super();
@@ -635,6 +672,8 @@ export class Project extends Scene {
             sphere: new Subdivision_Sphere(4),
             bounding_box: new Cube_Outline(),
             ground: new Cube(),
+            zoomedBox : new ZoomedOutTextureCube(),
+            axis: new Axis_Arrows(),
             square: new Square(),
             tree: new Shape_From_File("assets/CommonTree_1.obj"),
             tree2: new Shape_From_File("assets/CommonTree_2.obj"),
@@ -656,6 +695,7 @@ export class Project extends Scene {
             throw_price: new Text_Line(50),
             powerup_multishot: new Text_Line(50),
         }
+        this.wallDimensions = [10, 10, 10];
 
         this.materials = {
             phong: new Material(new Phong_Shader(), {
@@ -758,8 +798,16 @@ export class Project extends Scene {
                 ambient: 1, diffusivity: 0, specularity: 0, texture: new Texture("assets/text.png")
             }),
 
+            wall: new Material(new Textured_Phong(), {
+                color: hex_color("#53350A"),
+                ambient: 0.4, specularity: .4, diffusivity: .4,
+                
+                texture: new Texture("assets/Wallstone.png", "REPEAT") // Using REPEAT for texture wrap
+            })
+
 
         }
+
 
         this.projectiles = [];
         this.balloons = []
@@ -1069,6 +1117,8 @@ export class Project extends Scene {
 
         drawTerrain(context, program_state, this.shapes.ground, shadow_pass ? this.materials.terrain : this.materials.pure);
         drawSkybox(context, program_state, this.shapes.square, [this.materials.skybox_top, this.materials.skybox_front, this.materials.skybox_left, this.materials.skybox_right, this.materials.skybox_back], shadow_pass );
+        drawWall(context, program_state, this.shapes.zoomedBox, this.materials.wall, this.wallDimensions, 1);
+
         this.drawHUD(context, program_state, shadow_pass)
 
         program_state.camera_inverse = Mat4.inverse(Mat4.translation(...origin).times(camera_matrix));
