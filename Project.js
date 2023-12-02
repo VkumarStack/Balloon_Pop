@@ -3,6 +3,10 @@ import {Color_Phong_Shader, Shadow_Textured_Phong_Shader,
     Depth_Texture_Shader_2D, Buffered_Texture, LIGHT_DEPTH_TEX_SIZE} from './examples/shadow-demo-shaders.js'
 import { Shape_From_File } from "./examples/obj-file-demo.js"
 import { Text_Line } from './examples/text-demo.js';
+import {
+    HandLandmarker,
+    FilesetResolver
+} from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0";
 
 const {
     Vector, Vector3, vec, vec3, vec4, color, hex_color, Shader, Matrix, Mat4, Light, Shape, Material, Scene, Texture,
@@ -15,6 +19,8 @@ const white = new Material(new defs.Basic_Shader())
 // Mouse movements
 let dx = 0;
 let dy = 0;
+let avgDx = Array(5).fill(0);
+let avgDy = Array(5).fill(0);
 
 // Mouse sensitivity
 const sensitivity = 5;
@@ -31,6 +37,175 @@ const BALLOON_HEALTH = [hex_color("FF0000"), hex_color("FF0000"), hex_color("000
 const INITIAL_POSITION = vec3(0, 0, 8) 
 let player; // Create player object on scene initialization to deal with collisions
 
+// Mediapipe Variables and setup
+let previousPos = null
+let handLandmarker = undefined;
+let runningMode = "VIDEO";
+let webcamRunning = false;
+let video = document.createElement("video")
+video.autoplay = true;
+const createHandLandmarker = async () => {
+    const vision = await FilesetResolver.forVisionTasks(
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm"
+    );
+    handLandmarker = await HandLandmarker.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`,
+        delegate: "GPU"
+      },
+      runningMode: runningMode,
+      numHands: 1
+    });
+};
+createHandLandmarker();
+
+// Check if webcam access is supported.
+const hasGetUserMedia = () => !!navigator.mediaDevices?.getUserMedia;
+
+// Enable the live webcam view and start detection.
+function enableCam(event, shootFunction) {
+    if (!handLandmarker) {
+      console.log("Wait! objectDetector not loaded yet.");
+      return;
+    }
+
+    if (webcamRunning === true) {
+        webcamRunning = false;
+      } else {
+        webcamRunning = true;
+      }
+
+    // getUsermedia parameters.
+    const constraints = {
+      video: true
+    };
+  
+    // Activate the webcam stream.
+    navigator.mediaDevices.getUserMedia(constraints).then((stream) => {
+      video.srcObject = stream;
+      video.addEventListener("loadeddata", () => predictWebcam(shootFunction));
+    });
+}
+
+function inFiringPosition(landmarks) {
+    // This determines whether a finger that is not the thumb is closed by determining the distance of the finger tip from the 
+    // wrist, normalized by the distance of the wrist to the MCP joint of that finger
+    
+    let tips = [12, 16, 20]
+    let mcps = [9, 13, 17]
+    let totalDistance = 0;
+    for (let i = 0; i < tips.length; i++)
+    {
+        let MCPlength = 0;
+        let tipLength = 0;
+
+        let tip = landmarks[0][tips[i]]
+        let MCP = landmarks[0][mcps[i]]
+        let reference = landmarks[0][0] // wrist reference
+        // Iterate through each x, y, z component and calculate distance
+        Object.keys(tip).forEach((key) => {
+            MCPlength += (MCP[key] - reference[key])**2
+            tipLength += (tip[key] - reference[key])**2
+        })
+        MCPlength = Math.sqrt(MCPlength);
+        tipLength = Math.sqrt(tipLength) / MCPlength;
+        totalDistance += tipLength
+    }
+    return totalDistance <= 4.0
+}
+
+function isFiring(landmarks) {
+    let thumbTip = landmarks[0][4]
+    let indexMCP = landmarks[0][5]
+    let distance = 0
+    Object.keys(thumbTip).forEach((key) => {
+        distance += (indexMCP[key] - thumbTip[key])**2
+    })
+
+    return distance * 100 <= 1
+}
+
+function isFiringAlternate(landmarks) {
+    let middleFingerTip = landmarks[0][12]
+    let middleFingerMCP = landmarks[0][9]
+    let wrist = landmarks[0][0]
+    let MCPlength = 0;
+    let tipLength = 0;
+    Object.keys(middleFingerTip).forEach((key) => {
+        MCPlength += (middleFingerMCP[key] - wrist[key])**2
+        tipLength += (middleFingerTip[key] - wrist[key])**2
+    })
+   return Math.sqrt(tipLength) / Math.sqrt(MCPlength) <= 1.0
+}
+
+
+let lastVideoTime = -1;
+let results = undefined;
+async function predictWebcam(shootFunction) {
+  // Now let's start detecting the stream.
+  if (runningMode === "IMAGE") {
+    runningMode = "VIDEO";
+    await handLandmarker.setOptions({ runningMode: "VIDEO" });
+  }
+  let startTimeMs = performance.now();
+  if (lastVideoTime !== video.currentTime) {
+    lastVideoTime = video.currentTime;
+    results = handLandmarker.detectForVideo(video, startTimeMs);
+  }
+  if (results.landmarks.length != 0) {
+    const index = results.landmarks[0]["8"]
+    isFiringAlternate(results.landmarks)
+    if (isFiring(results.landmarks))
+    {   
+        shootFunction()
+    }
+    if (previousPos !== null && inFiringPosition(results.landmarks))
+    {
+        for (let i = 0; i < avgDx.length - 1; i++)
+        {
+            avgDx[i + 1] = avgDx[i]
+            avgDy[i + 1] = avgDy[i]
+        }
+        avgDx[0] = (index.x - previousPos.x) * -3000
+        avgDy[0] = (index.y - previousPos.y) * 3000
+        dx = avgDx.reduce((partialSum, dx) => partialSum + dx, 0) / avgDx.length
+        dy = avgDy.reduce((partialSum, dy) => partialSum + dy, 0) / avgDy.length
+    }
+    else 
+    {
+        for (let i = 0; i < avgDx.length - 1; i++)
+        {
+            avgDx[i + 1] = avgDx[i]
+            avgDy[i + 1] = avgDy[i]
+        }
+        avgDx[0] = 0
+        avgDy[0] = 0
+        dx = avgDx.reduce((partialSum, dx) => partialSum + dx, 0) / avgDx.length
+        dy = avgDy.reduce((partialSum, dy) => partialSum + dy, 0) / avgDy.length
+    }
+    previousPos = index;
+
+}
+  // Call this function again to keep predicting when the browser is ready.
+  if (webcamRunning === true) {
+    window.requestAnimationFrame(() => predictWebcam(shootFunction));
+  }
+}
+
+
+function fpsLook(radians_per_frame) {
+    pitch = pitch + sensitivity * dx * radians_per_frame;
+    // Limit how much the player can look up, as in traditional fps games
+    yaw = Math.max(- Math.PI / 2, Math.min(yaw + sensitivity * dy * radians_per_frame, Math.PI / 2))
+    camera_matrix = Mat4.identity();
+    camera_matrix = camera_matrix.times(Mat4.rotation(-pitch, 0, 1, 0)); // Rotate by pitch
+    camera_matrix = camera_matrix.times(Mat4.rotation(-yaw, 1, 0, 0)); // Rotate by yaw
+    // Recalculate front and right vectors every time player changes where they look so they move accordingly
+    front = Mat4.rotation(-pitch, 0, 1, 0).times(vec3(0, 0, 1))
+    front = vec3(front[0], front[1], front[2])
+    right = vec3(0, 1, 0).cross(front)
+}
+
 // Overriding original movement and mouse controller to create fps controller
 const Movement = 
 class Movement extends defs.Movement_Controls {
@@ -44,10 +219,16 @@ class Movement extends defs.Movement_Controls {
         canvas.addEventListener( "mouseout",  e => { if( !this.mouse.anchor ) this.mouse.from_center.scale_by(0) } );
 
         canvas.onclick = () => canvas.requestPointerLock();
-        
+
+        let timer;
         let updatePosition = (e) => {
             dx = e.movementX;
             dy = e.movementY;
+            clearTimeout(timer);
+            timer = setTimeout(() => {
+                dx = 0;
+                dy = 0;
+            }, 50)
           };
 
         let lockChangeAlert = () => {
@@ -85,16 +266,7 @@ class Movement extends defs.Movement_Controls {
 
     // Overriding mouse controls here to allow for first person movement
     third_person_arcball (radians_per_frame) {
-        pitch = pitch + sensitivity * dx * radians_per_frame;
-        // Limit how much the player can look up, as in traditional fps games
-        yaw = Math.max(- Math.PI / 2, Math.min(yaw + sensitivity * dy * radians_per_frame, Math.PI / 2))
-        camera_matrix = Mat4.identity();
-        camera_matrix = camera_matrix.times(Mat4.rotation(-pitch, 0, 1, 0)); // Rotate by pitch
-        camera_matrix = camera_matrix.times(Mat4.rotation(-yaw, 1, 0, 0)); // Rotate by yaw
-        // Recalculate front and right vectors every time player changes where they look so they move accordingly
-        front = Mat4.rotation(-pitch, 0, 1, 0).times(vec3(0, 0, 1))
-        front = vec3(front[0], front[1], front[2])
-        right = vec3(0, 1, 0).cross(front)
+        fpsLook(radians_per_frame);
     }
 
     make_control_panel() {
@@ -619,7 +791,7 @@ export class Project extends Scene {
         this.spawnBalloons();
 
         this.health = 100;
-        this.money = 0;
+        this.money = 10;
 
         // Powerups and their prices
         this.projectilePierceTier = 0; // Index of projectilePierces
@@ -638,11 +810,11 @@ export class Project extends Scene {
         this.fullHUD = true;
 
         this.init_ok = false;
+        this.motion_controls = false;
     }
 
-    make_control_panel() {
-        this.key_triggered_button("Shoot", [" "], () => {
-            if (this.canShoot)
+    fireprojectile() {
+        if (this.canShoot)
             {
                 this.canShoot = false;
                 const projSpeed = this.projectileSpeeds[this.projectileSpeedTier]
@@ -658,6 +830,11 @@ export class Project extends Scene {
                 }
                 setTimeout(() => this.canShoot = true, this.shootCooldowns[this.shootCooldownTier]);
             }
+    }
+
+    make_control_panel() {
+        this.key_triggered_button("Shoot", [" "], () => {
+            this.fireprojectile()
         })
         this.key_triggered_button("Toggle Multishot", ["q"], () => {
             if (this.ownsMultishot)
@@ -681,6 +858,7 @@ export class Project extends Scene {
             }
         })
         this.key_triggered_button("Upgrade Projectile Speed", ["i"], () => {
+            console.log("Projectile Speed: " + this.projectileSpeedPrices[this.projectileSpeedTier])
             if (this.projectileSpeedTier != this.projectileSpeedPrices.length && this.money >= this.projectileSpeedPrices[this.projectileSpeedTier]) {
                 this.money -= this.projectileSpeedPrices[this.projectileSpeedTier]
                 this.projectileSpeedTier += 1
@@ -692,7 +870,11 @@ export class Project extends Scene {
                 this.shootCooldownTier += 1
             }
         })
-        
+        this.key_triggered_button("Hand Controls", ["z"], () => {
+            if (!this.motion_controls && hasGetUserMedia()) {
+                enableCam(null, this.fireprojectile.bind(this))
+            }
+        })
     }
 
     drawHUD(context, program_state, shadow_pass) {
@@ -743,7 +925,7 @@ export class Project extends Scene {
             {
                 this.shapes.speed_price.set_string("Next Tier:$" + String(this.projectileSpeedPrices[this.projectileSpeedTier]), context.context)
                 lookDirection = camera_matrix.times(vec4(0.27, currY, -0.6, 0))
-                this.shapes.pierce_price.draw(context, program_state, Mat4.translation(...lookDirection).times(mat).times(Mat4.scale(0.8, 0.8, 0.8)), this.materials.text )
+                this.shapes.speed_price.draw(context, program_state, Mat4.translation(...lookDirection).times(mat).times(Mat4.scale(0.8, 0.8, 0.8)), this.materials.text )
                 currY -= 0.03;
             }
 
