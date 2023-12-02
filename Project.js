@@ -2,6 +2,7 @@ import {defs, tiny} from './examples/common.js';
 import {Color_Phong_Shader, Shadow_Textured_Phong_Shader,
     Depth_Texture_Shader_2D, Buffered_Texture, LIGHT_DEPTH_TEX_SIZE} from './examples/shadow-demo-shaders.js'
 import { Shape_From_File } from "./examples/obj-file-demo.js"
+import { Text_Line } from './examples/text-demo.js';
 
 const {
     Vector, Vector3, vec, vec3, vec4, color, hex_color, Shader, Matrix, Mat4, Light, Shape, Material, Scene, Texture,
@@ -96,8 +97,20 @@ class Movement extends defs.Movement_Controls {
         right = vec3(0, 1, 0).cross(front)
     }
 
+    make_control_panel() {
+        // make_control_panel(): Sets up a panel of interactive HTML elements, including
+        // The facing directions are surprisingly affected by the left hand rule:
+
+        this.key_triggered_button("Forward", ["w"], () => this.thrust[2] = 1, undefined, () => this.thrust[2] = 0);
+        this.new_line();
+        this.key_triggered_button("Left", ["a"], () => this.thrust[0] = 1, undefined, () => this.thrust[0] = 0);
+        this.key_triggered_button("Back", ["s"], () => this.thrust[2] = -1, undefined, () => this.thrust[2] = 0);
+        this.key_triggered_button("Right", ["d"], () => this.thrust[0] = -1, undefined, () => this.thrust[0] = 0);
+        this.new_line();
+    }
+
     display (context, graphics_state, dt= graphics_state.animation_delta_time / 1000) {
-        console.time("Movement display")
+        // console.time("Movement display")
         const m  = this.speed_multiplier * this.meters_per_frame,
               r  = this.speed_multiplier * this.radians_per_frame
 
@@ -115,7 +128,7 @@ class Movement extends defs.Movement_Controls {
         this.first_person_flyaround (dt * r, dt * m);
         if (!this.mouse.anchor)
             this.third_person_arcball(dt * r);
-        console.timeEnd("Movement display")
+        // console.timeEnd("Movement display")
     }
 }
 
@@ -131,6 +144,7 @@ class Collidable {
         this.size = size; // Size is a scale matrix; if the bound is a box then this represents the dimensions of the box otherwise if the bound is a sphere
         // it represents the radius
         this.boundingBox = true; // Determines whether the bound type being used is a bounding box or a bounding sphere
+        this.pierceable = false // Determines whether the object can be pierced (only balloons)
         this.updateBoundBox();
     }
 
@@ -150,7 +164,7 @@ class Collidable {
     }
 
     checkCollision(other) {
-        console.time("Collision checking")
+        // console.time("Collision checking")
 
         let test;
         if (this.boundingBox && other.boundingBox) // Box-Box collision
@@ -194,12 +208,18 @@ class Collidable {
             if (!this.collidedObjects.has(other)) {
                 this.collidedObjects.add(other);
                 other.collidedObjects.add(this);
+                this.handleCollision(other);
             }
         }
 
-        console.timeEnd("Collision checking")
+        // console.timeEnd("Collision checking")
 
         return test;
+    }
+
+    // If anything beyond checking whether a collision has occurred, override this method
+    handleCollision(other) {
+
     }
 }
 
@@ -225,8 +245,9 @@ class Player extends Collidable {
 }
 
 class Projectile extends Collidable {
-    constructor(matrix, size, velocity, pitch, yaw, shape, material, shadow) {
+    constructor(durability, matrix, size, velocity, pitch, yaw, shape, material, shadow) {
         super(matrix, size);
+        this.durability = durability;
         this.velocity = velocity;
         this.pitch = pitch;
         this.yaw = yaw;
@@ -249,13 +270,17 @@ class Projectile extends Collidable {
         this.shape.draw(context, program_state, this.matrix.times(Mat4.rotation(-1 * this.pitch, 0, 1, 0)).times(Mat4.rotation(-1 * this.yaw, 1, 0, 0)).times(this.size), shadow_pass ? this.material : this.shadow)
         this.velocity[1] = this.velocity[1] + (9.8 * dt * 0.75)
     }
+
 }
 
 class Balloon extends Collidable {
     constructor(size, initial_pos, durability, shape, material, shadow) 
     {
         super(Mat4.identity(), size);
+        this.originalHealth = durability;
         this.durability = durability;
+        this.pierceable = true;
+        this.reachedEnd = false;
         this.initial_pos = initial_pos;
         this.boundingBox = false; // Sphere bound
         this.shape = shape;
@@ -323,6 +348,8 @@ class Balloon extends Collidable {
             const stage11Time = Math.min(314.25 - 309.25, this.progress - 309.25)
             matrix = Mat4.translation(stage11Time, -stage11Time * stage11Time * 10 / 25, 0).times(matrix)
         }
+        if (this.progress >= 314.25)
+            this.reachedEnd = true;
 
         this.updateMatrix(matrix)
         
@@ -333,7 +360,13 @@ class Balloon extends Collidable {
                 collided = true;
             }
         })
-        this.shape.draw(context, program_state, this.matrix.times(this.size), shadow_pass ? this.material.override(BALLOON_HEALTH[this.durability - this.collidedObjects.size]) : this.shadow)
+        this.shape.draw(context, program_state, this.matrix.times(this.size), shadow_pass ? this.material.override(BALLOON_HEALTH[this.durability]) : this.shadow)
+    }
+
+    handleCollision(projectile) {
+        const numPierces = Math.min(this.durability, projectile.durability)
+        projectile.durability -= numPierces;
+        this.durability -= numPierces;
     }
 }
 
@@ -377,14 +410,14 @@ class Nature extends Collidable {
 }
 
 function drawTerrain(context, program_state, shape, material) {
-    console.time("Draws terrain")
+    // console.time("Draws terrain")
     // Have the terrain by a large cube with its top face being stood on
     shape.draw(context, program_state, Mat4.translation(0, -2, 0).times(Mat4.scale(100, 1, 100)), material);
-    console.timeEnd("Draws terrain")
+    // console.timeEnd("Draws terrain")
 }
 
 function drawSkybox(context, program_state, shape, materials, shadow_pass) {
-    console.time("Draws skybox")
+    // console.time("Draws skybox")
     if (shadow_pass)
     {
         shape.draw(context, program_state, Mat4.translation(0, 100, 0).times(Mat4.scale(100, 1, 100)).times(Mat4.rotation(Math.PI / 2, 1, 0 ,0)), materials[0])
@@ -393,7 +426,7 @@ function drawSkybox(context, program_state, shape, materials, shadow_pass) {
         shape.draw(context, program_state, Mat4.translation(100, 0, 0).times(Mat4.rotation(-Math.PI / 2, 0, 1, 0)).times(Mat4.scale(100, 100, 1)), materials[3])
         shape.draw(context, program_state, Mat4.translation(0, 0, 100).times(Mat4.scale(100, 100, 1)).times(Mat4.rotation(Math.PI, 0, 1, 0)), materials[4])
     }
-    console.timeEnd("Draws skybox")
+    // console.timeEnd("Draws skybox")
 }
 
 
@@ -436,6 +469,16 @@ export class Project extends Scene {
             birch: new Shape_From_File("assets/BirchTree_2.obj"),
             rock: new Shape_From_File("assets/Rock_3.obj"),
             log: new Shape_From_File("assets/WoodLog.obj"),
+            crosshair: new Text_Line(1),
+            health: new Text_Line(12),
+            money: new Text_Line(15),
+            powerup_pierce: new Text_Line(50),
+            pierce_price: new Text_Line(50),
+            powerup_speed: new Text_Line(50),
+            speed_price: new Text_Line(50),
+            powerup_throw: new Text_Line(50),
+            throw_price: new Text_Line(50),
+            powerup_multishot: new Text_Line(50),
         }
 
         this.materials = {
@@ -534,7 +577,10 @@ export class Project extends Scene {
             }),
             log: new Material(new Phong_Shader(), {
                 color: hex_color("635946")
-            })
+            }),
+            text: new Material(new Textured_Phong(1), { 
+                ambient: 1, diffusivity: 0, specularity: 0, texture: new Texture("assets/text.png")
+            }),
 
 
         }
@@ -557,10 +603,6 @@ export class Project extends Scene {
         ];
         player = new Player(Mat4.translation(...INITIAL_POSITION), this.nature)
 
-        this.multishot = false;
-        this.shootCooldown = 1000;
-        this.canShoot = true;
-
         this.addBalloon = () => {
             this.balloons.push(new Balloon(Mat4.scale(0.7, 0.7, 0.7), Mat4.translation(-100, 0, 0), 2, this.shapes.sphere, this.materials.phong, this.materials.shadow))
         }
@@ -572,6 +614,25 @@ export class Project extends Scene {
 
         this.spawnBalloons();
 
+        this.health = 100;
+        this.money = 9000;
+
+        // Powerups and their prices
+        this.projectilePierceTier = 0; // Index of projectilePierces
+        this.projectilePierces = [1, 2, 3, 5, 10, 20]
+        this.projectilePiercePrices = [10, 30, 60, 100, 500]
+        this.projectileSpeedTier = 0;
+        this.projectileSpeeds = [1, 2, 3.5, 8]
+        this.projectileSpeedPrices = [40, 100, 600]
+        this.shootCooldownTier = 0;
+        this.shootCooldowns = [1000, 500, 250, 100, 50];
+        this.shootCooldownPrices = [150, 300, 500, 1000]
+        this.ownsMultishot = false;
+        this.multishotPrice = 500;
+        this.multishot = false;
+        this.canShoot = true;
+        this.fullHUD = true;
+
         this.init_ok = false;
     }
 
@@ -580,27 +641,121 @@ export class Project extends Scene {
             if (this.canShoot)
             {
                 this.canShoot = false;
+                const projSpeed = this.projectileSpeeds[this.projectileSpeedTier]
+                const pierce = this.projectilePierces[this.projectilePierceTier]
                 let lookDirection = camera_matrix.times(vec4(0, 0, 1, 0));
                 if (!this.multishot)
-                    this.projectiles.push(new Projectile(Mat4.translation(...origin), Mat4.scale(1/2, 1/2, 1/2), lookDirection.times(50), pitch, yaw, this.shapes.projectile, this.materials.phong, this.materials.shadow));
+                    this.projectiles.push(new Projectile(pierce, Mat4.translation(...origin), Mat4.scale(1/2, 1/2, 1/2), lookDirection.times(40 * projSpeed), pitch, yaw, this.shapes.projectile, this.materials.phong, this.materials.shadow));
                 else
                 {
-                    this.projectiles.push(new Projectile(Mat4.translation(...origin), Mat4.scale(1/2, 1/2, 1/2), Mat4.rotation(Math.PI / 12, 0, 1, 0).times(lookDirection).times(50), pitch - Math.PI / 12, yaw, this.shapes.projectile, this.materials.phong, this.materials.shadow));
-                    this.projectiles.push(new Projectile(Mat4.translation(...origin), Mat4.scale(1/2, 1/2, 1/2), lookDirection.times(50), pitch, yaw, this.shapes.projectile, this.materials.phong, this.materials.shadow));
-                    this.projectiles.push(new Projectile(Mat4.translation(...origin), Mat4.scale(1/2, 1/2, 1/2), Mat4.rotation(-Math.PI / 12, 0, 1, 0).times(lookDirection).times(50), pitch + Math.PI / 12, yaw, this.shapes.projectile, this.materials.phong, this.materials.shadow));
+                    this.projectiles.push(new Projectile(pierce, Mat4.translation(...origin), Mat4.scale(1/2, 1/2, 1/2), Mat4.rotation(Math.PI / 12, 0, 1, 0).times(lookDirection).times(40 * projSpeed), pitch - Math.PI / 12, yaw, this.shapes.projectile, this.materials.phong, this.materials.shadow));
+                    this.projectiles.push(new Projectile(pierce, Mat4.translation(...origin), Mat4.scale(1/2, 1/2, 1/2), lookDirection.times(40 * projSpeed), pitch, yaw, this.shapes.projectile, this.materials.phong, this.materials.shadow));
+                    this.projectiles.push(new Projectile(pierce, Mat4.translation(...origin), Mat4.scale(1/2, 1/2, 1/2), Mat4.rotation(-Math.PI / 12, 0, 1, 0).times(lookDirection).times(40 * projSpeed), pitch + Math.PI / 12, yaw, this.shapes.projectile, this.materials.phong, this.materials.shadow));
                 }
-                setTimeout(() => this.canShoot = true, this.shootCooldown);
+                setTimeout(() => this.canShoot = true, this.shootCooldowns[this.shootCooldownTier]);
             }
         })
-        this.key_triggered_button("Multishot", ["m"], () => {
-            this.multishot = !this.multishot;
+        this.key_triggered_button("Toggle Multishot", ["q"], () => {
+            if (this.ownsMultishot)
+                this.multishot = !this.multishot;
         })
-        this.key_triggered_button("Supermonkey", ["q"], () => {
-            if (this.shootCooldown == 0)
-                this.shootCooldown = 1000;
-            else
-                this.shootCooldown = 0;
+        this.key_triggered_button("Minimize HUD", ["e"], () => {
+            this.fullHUD = !this.fullHUD
         })
+
+        this.key_triggered_button("Buy Multishot", ["p"], () => {
+            if (!this.ownsMultishot && this.money >= this.multishotPrice)
+            {
+                this.ownsMultishot = true;
+                this.money -= this.multishotPrice;
+            }
+        })
+        this.key_triggered_button("Upgrade Projectile Piercing", ["o"], () => {
+            if (this.projectilePierceTier != this.projectilePiercePrices.length && this.money >= this.projectilePiercePrices[this.projectilePierceTier]) {
+                this.money -= this.projectilePiercePrices[this.projectilePierceTier]
+                this.projectilePierceTier += 1
+            }
+        })
+        this.key_triggered_button("Upgrade Projectile Speed", ["i"], () => {
+            if (this.projectileSpeedTier != this.projectileSpeedPrices.length && this.money >= this.projectileSpeedPrices[this.projectileSpeedTier]) {
+                this.money -= this.projectileSpeedPrices[this.projectileSpeedTier]
+                this.projectileSpeedTier += 1
+            }
+        })
+        this.key_triggered_button("Upgrade Throwing Rate", ["u"], () => {
+            if (this.shootCooldownTier != this.shootCooldownPrices.length && this.money >= this.shootCooldownPrices[this.shootCooldownTier]) {
+                this.money -= this.shootCooldownPrices[this.shootCooldownTier]
+                this.shootCooldownTier += 1
+            }
+        })
+        
+    }
+
+    drawHUD(context, program_state, shadow_pass) {
+        if (shadow_pass)
+        {
+            this.shapes.crosshair.set_string("+", context.context)
+            this.shapes.money.set_string("Money:$" +  String(this.money), context.context)
+            this.shapes.health.set_string("Health:" + String(this.health), context.context)
+            this.shapes.powerup_pierce.set_string("Pierce Tier:" + String(this.projectilePierceTier + 1), context.context)
+            this.shapes.powerup_speed.set_string("Speed Tier:" + String(this.projectileSpeedTier + 1), context.context)
+            this.shapes.powerup_throw.set_string("Throw Tier:" + String(this.shootCooldownTier + 1), context.context)
+            this.shapes.powerup_multishot.set_string("Multishot:" + (this.ownsMultishot ? (this.multishot ? "On" : "Off") : "$500"), context.context)
+            const mat = Mat4.translation(...origin).times(camera_matrix).times(Mat4.scale(0.01, 0.01, 0.01))
+
+            let lookDirection = camera_matrix.times(vec4(0, 0, -0.6, 0))
+            this.shapes.crosshair.draw(context, program_state, Mat4.translation(...lookDirection).times(mat), this.materials.text )
+            
+            lookDirection = camera_matrix.times(vec4(0.25, 0.23, -0.6, 0))
+            this.shapes.money.draw(context, program_state, Mat4.translation(...lookDirection).times(mat), this.materials.text )
+
+            lookDirection = camera_matrix.times(vec4(0.25, 0.2, -0.6, 0))
+            this.shapes.health.draw(context, program_state, Mat4.translation(...lookDirection).times(mat), this.materials.text )
+
+            if (!this.fullHUD)
+                return;
+
+            lookDirection = camera_matrix.times(vec4(0.25, 0.17, -0.6, 0))
+            this.shapes.powerup_multishot.draw(context, program_state, Mat4.translation(...lookDirection).times(mat).times(Mat4.scale(0.9, 0.9, 0.9)), this.materials.text )
+
+            let currY = 0.14
+
+            lookDirection = camera_matrix.times(vec4(0.25, currY, -0.6, 0))
+            this.shapes.powerup_pierce.draw(context, program_state, Mat4.translation(...lookDirection).times(mat).times(Mat4.scale(0.9, 0.9, 0.9)), this.materials.text )
+            currY -= 0.03
+
+            if (this.projectilePierceTier != this.projectilePiercePrices.length)
+            {
+                this.shapes.pierce_price.set_string("Next Tier:$" + String(this.projectilePiercePrices[this.projectilePierceTier]), context.context)
+                lookDirection = camera_matrix.times(vec4(0.27, currY, -0.6, 0))
+                this.shapes.pierce_price.draw(context, program_state, Mat4.translation(...lookDirection).times(mat).times(Mat4.scale(0.8, 0.8, 0.8)), this.materials.text )
+                currY -= 0.03;
+            }
+
+            lookDirection = camera_matrix.times(vec4(0.25, currY, -0.6, 0))
+            this.shapes.powerup_speed.draw(context, program_state, Mat4.translation(...lookDirection).times(mat).times(Mat4.scale(0.9, 0.9, 0.9)), this.materials.text )
+            currY -= 0.03;
+            if (this.projectileSpeedTier != this.projectileSpeedPrices.length)
+            {
+                this.shapes.speed_price.set_string("Next Tier:$" + String(this.projectileSpeedPrices[this.projectileSpeedTier]), context.context)
+                lookDirection = camera_matrix.times(vec4(0.27, currY, -0.6, 0))
+                this.shapes.pierce_price.draw(context, program_state, Mat4.translation(...lookDirection).times(mat).times(Mat4.scale(0.8, 0.8, 0.8)), this.materials.text )
+                currY -= 0.03;
+            }
+
+            lookDirection = camera_matrix.times(vec4(0.25, currY, -0.6, 0))
+            this.shapes.powerup_throw.draw(context, program_state, Mat4.translation(...lookDirection).times(mat).times(Mat4.scale(0.9, 0.9, 0.9)), this.materials.text )
+            currY -= 0.03
+            if (this.shootCooldownTier != this.shootCooldownPrices.length)
+            {
+                this.shapes.throw_price.set_string("Next Tier:$" + String(this.shootCooldownPrices[this.shootCooldownTier]), context.context)
+                lookDirection = camera_matrix.times(vec4(0.27, currY, -0.6, 0))
+                this.shapes.throw_price.draw(context, program_state, Mat4.translation(...lookDirection).times(mat).times(Mat4.scale(0.8, 0.8, 0.8)), this.materials.text )
+                currY -= 0.03;
+            }
+
+
+        }
     }
 
     texture_buffer_init(gl) {
@@ -679,18 +834,18 @@ export class Project extends Scene {
 
         program_state.draw_shadow = draw_shadow;
 
-        console.time("Draws light-src")
+        // console.time("Draws light-src")
         if (draw_light_source && shadow_pass) {
             this.shapes.sphere.draw(context, program_state,
                 Mat4.translation(light_position[0], light_position[1], light_position[2]).times(Mat4.scale(1,1,1)),
                 this.materials.light_src.override({color: hex_color("#FC9601")}));
         }
-        console.timeEnd("Draws light-src")
+        // console.timeEnd("Draws light-src")
 
-        console.time("Draws projectiles")
+        // console.time("Draws projectiles")
         for (let i = 0; i < this.projectiles.length; i++)
         {
-            if (this.projectiles[i].collidedObjects.size == 0 && !this.projectiles[i].out_of_bounds)
+            if (this.projectiles[i].durability != 0 && !this.projectiles[i].out_of_bounds)
                 this.projectiles[i].draw(context, program_state, dt, shadow_pass)
             else
             {
@@ -698,87 +853,44 @@ export class Project extends Scene {
                 i--;
             }
         }
-        console.timeEnd("Draws projectiles")
+        // console.timeEnd("Draws projectiles")
         
-        console.time("Draws balloons")
-        console.log("# Balloons: %d", this.balloons.length)
+        // console.time("Draws balloons")
+        // console.log("# Balloons: %d", this.balloons.length)
         for (let i = 0; i < this.balloons.length; i++)
         {
-            if (this.balloons[i].collidedObjects.size < this.balloons[i].durability)
+            if (this.balloons[i].durability != 0 && !this.balloons[i].reachedEnd)
                 this.balloons[i].draw(context, program_state, dt, this.projectiles, shadow_pass)
             else
             {
-                console.time("Balloons Array Splicing")
+                // console.time("Balloons Array Splicing")
+                if (this.balloons[i].reachedEnd)
+                    this.health = Math.max(this.health - (this.balloons[i].durability - this.balloons[i].collidedObjects.size), 0)
+                else
+                    this.money += this.balloons[i].durability;
                 this.balloons.splice(i, 1);
                 i--;
-                console.timeEnd("Balloons Array Splicing")
+                // console.timeEnd("Balloons Array Splicing")
             }
         } 
-        console.timeEnd("Draws balloons")
+        // console.timeEnd("Draws balloons")
 
-        console.time("Draws natures")
+        // console.time("Draws natures")
         this.nature.forEach((nature) => {
             nature.draw(context, program_state, this.projectiles, shadow_pass, this.shapes.bounding_box, this.materials.bound_box)
         })
-        console.timeEnd("Draws natures")
+        // console.timeEnd("Draws natures")
 
         drawTerrain(context, program_state, this.shapes.ground, shadow_pass ? this.materials.terrain : this.materials.pure);
         drawSkybox(context, program_state, this.shapes.square, [this.materials.skybox_top, this.materials.skybox_front, this.materials.skybox_left, this.materials.skybox_right, this.materials.skybox_back], shadow_pass );
+        this.drawHUD(context, program_state, shadow_pass)
 
         program_state.camera_inverse = Mat4.inverse(Mat4.translation(...origin).times(camera_matrix));
 
     }
-    /*
-    display(context, program_state) {
-        if (!context.scratchpad.controls) {
-            this.children.push(context.scratchpad.controls = new Movement());
-            origin = INITIAL_POSITION;
-        }
-
-        program_state.projection_transform = Mat4.perspective(
-            Math.PI / 4, context.width / context.height, 1, 300);
-
-        const light_position = vec4(20, 100, 20, 1);
-        program_state.lights = [new Light(light_position, color(1, 1, 1, 1), 1000000)];
-
-        let t = program_state.animation_time / 1000, dt = program_state.animation_delta_time / 1000;
-        let model_transform = Mat4.identity();
-
-        drawTerrain(context, program_state, this.shapes.ground, this.materials.terrain);
-        drawSkybox(context, program_state, this.shapes.square, [this.materials.skybox_top, this.materials.skybox_front, this.materials.skybox_left, this.materials.skybox_right, this.materials.skybox_back] );
-
-        for (let i = 0; i < this.projectiles.length; i++)
-        {
-            if (this.projectiles[i].collidedObjects.size == 0 && !this.projectiles[i].out_of_bounds)
-                this.projectiles[i].draw(context, program_state, dt)
-            else
-            {
-                this.projectiles.splice(i, 1);
-                i--;
-            }
-        }
-        
-        for (let i = 0; i < this.balloons.length; i++)
-        {
-            if (this.balloons[i].collidedObjects.size < this.balloons[i].durability)
-                this.balloons[i].draw(context, program_state, dt, this.projectiles)
-            else
-            {
-                this.balloons.splice(i, 1);
-                i--;
-            }
-        } 
-
-        this.nature.forEach((nature) => {
-            nature.draw(context, program_state, this.projectiles)
-        })
-
-        program_state.camera_inverse = Mat4.inverse(Mat4.translation(...origin).times(camera_matrix));
-    }
-    */
 
     display(context, program_state) {
-        console.time("Initialization")
+        // console.time("Initialization")
 
         if (!context.scratchpad.controls) {
             this.children.push(context.scratchpad.controls = new Movement());
@@ -788,7 +900,7 @@ export class Project extends Scene {
         let t = program_state.animation_time / 1000, dt = program_state.animation_delta_time / 1000;
         const gl = context.context;
 
-        console.log(1 / dt)
+        // console.log(1 / dt)
 
         if (!this.init_ok) {
             const ext = gl.getExtension('WEBGL_depth_texture');
@@ -817,10 +929,10 @@ export class Project extends Scene {
 
         program_state.lights = [new Light(this.light_position, this.light_color, 100000)];
 
-        console.timeEnd("Initialization")
+        // console.timeEnd("Initialization")
 
 
-        console.time("Step 1")
+        // console.time("Step 1")
 
         // Step 1: set the perspective and camera to the POV of light
         const light_view_mat = Mat4.look_at(
@@ -841,8 +953,8 @@ export class Project extends Scene {
         program_state.projection_transform = light_proj_mat;
         this.render_scene(context, program_state, false, false, false);
 
-        console.timeEnd("Step 1")
-        console.time("Step 2")
+        // console.timeEnd("Step 1")
+        // console.time("Step 2")
 
         // Step 2: unbind, draw to the canvas
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -851,7 +963,7 @@ export class Project extends Scene {
         program_state.projection_transform = Mat4.perspective(Math.PI / 4, context.width / context.height, 0.5, 500);
         this.render_scene(context, program_state, true, true, true);
 
-        console.timeEnd("Step 2")
+        // console.timeEnd("Step 2")
 
         /*
         // Step 3: display the textures
