@@ -33,7 +33,17 @@ let pitch = 0; // Variables representing camera angle (left and right)
 let yaw = 0; // Up and down
 const TERRAIN_BOUNDS = vec3(100, 0, 100);
 // Colors for balloons at various positions of health (by their index)
-const BALLOON_HEALTH = [hex_color("FF0000"), hex_color("FF0000"), hex_color("0000FF"), hex_color("00FF00")]
+const BALLOON_HEALTH = [hex_color("#ff0000"), hex_color("#ff0000"), hex_color("#0092e3"), hex_color("#63a800"), hex_color("#ffd100"), hex_color("#ff2b51"), hex_color("#141414") ]
+
+const WAVE_INFORMATION = [
+    { balloons: [{1: 10}], balloon_speed: 0.5, spawn_interval: 3000 }, 
+    { balloons: [{1: 10}, {2: 5}], balloon_speed: 0.6, spawn_interval: 2500 }, 
+    { balloons: [{1: 20}, {2: 15}, {3: 5}], balloon_speed: 0.7, spawn_interval: 2000 }, 
+    { balloons: [{1: 30}, {2: 25}, {3: 15}, {4: 5}], balloon_speed: 0.8, spawn_interval: 2000}, 
+    { balloons: [{1: 50}, {2: 40}, {3: 40}, {4: 40}, {5: 20}], balloon_speed: 0.9, spawn_interval: 1500 }, 
+    { balloons: [{1: 100}, {2: 80}, {3: 80}, {4: 60}, {5: 40}, {6: 30}], balloon_speed: 1, spawn_interval: 1000 },
+    { balloons: [{1: 100}, {2: 100}, {3: 100}, {4: 100}, {5: 100}, {6: 100}], balloon_speed: 1.5, spawn_interval: 1000}
+]
 const INITIAL_POSITION = vec3(0, 0, 8) 
 let player; // Create player object on scene initialization to deal with collisions
 
@@ -42,6 +52,7 @@ let previousPos = null
 let handLandmarker = undefined;
 let runningMode = "VIDEO";
 let webcamRunning = false;
+let activatedBefore = false;
 let video = document.createElement("video")
 video.autoplay = true;
 const createHandLandmarker = async () => {
@@ -62,6 +73,7 @@ createHandLandmarker();
 // Check if webcam access is supported.
 const hasGetUserMedia = () => !!navigator.mediaDevices?.getUserMedia;
 
+let eventToRemove = null;
 // Enable the live webcam view and start detection.
 function enableCam(event, shootFunction) {
     if (!handLandmarker) {
@@ -75,6 +87,8 @@ function enableCam(event, shootFunction) {
         webcamRunning = true;
       }
 
+    if (eventToRemove != null)
+      video.removeEventListener("loadeddata", eventToRemove)
     // getUsermedia parameters.
     const constraints = {
       video: true
@@ -83,7 +97,8 @@ function enableCam(event, shootFunction) {
     // Activate the webcam stream.
     navigator.mediaDevices.getUserMedia(constraints).then((stream) => {
       video.srcObject = stream;
-      video.addEventListener("loadeddata", () => predictWebcam(shootFunction));
+      eventToRemove = () => predictWebcam(shootFunction)
+      video.addEventListener("loadeddata", eventToRemove);
     });
 }
 
@@ -122,6 +137,7 @@ function isFiring(landmarks) {
         distance += (indexMCP[key] - thumbTip[key])**2
     })
 
+    console.log("DISTANCE " + distance * 100)
     return distance * 100 <= 1
 }
 
@@ -154,8 +170,7 @@ async function predictWebcam(shootFunction) {
   }
   if (results.landmarks.length != 0) {
     const index = results.landmarks[0]["8"]
-    isFiringAlternate(results.landmarks)
-    if (isFiring(results.landmarks))
+    if (inFiringPosition(results.landmarks) && (isFiring(results.landmarks)))
     {   
         shootFunction()
     }
@@ -209,12 +224,20 @@ function fpsLook(radians_per_frame) {
 // Overriding original movement and mouse controller to create fps controller
 const Movement = 
 class Movement extends defs.Movement_Controls {
+    constructor(click_handler) {
+        super();
+        this.click_handler = click_handler
+    }
+
     add_mouse_controls (canvas) {
         this.mouse = { "from_center": vec( 0,0 ) };
         const mouse_position = (e, rect = canvas.getBoundingClientRect()) =>
         vec( e.clientX - (rect.left + rect.right)/2, e.clientY - (rect.bottom + rect.top)/2 );
         document.addEventListener( "mouseup",   e => { this.mouse.anchor = undefined; } );
-        canvas.addEventListener( "mousedown", e => { e.preventDefault(); this.mouse.anchor = mouse_position(e); } );
+        canvas.addEventListener( "mousedown", e => { 
+            e.preventDefault(); this.mouse.anchor = mouse_position(e); 
+            this.click_handler();
+        } );
         canvas.addEventListener( "mousemove", e => { e.preventDefault(); this.mouse.from_center = mouse_position(e); } );
         canvas.addEventListener( "mouseout",  e => { if( !this.mouse.anchor ) this.mouse.from_center.scale_by(0) } );
 
@@ -435,7 +458,7 @@ class Projectile extends Collidable {
     draw(context, program_state, dt, shadow_pass) {
         const posChange = this.velocity.times(dt * -1 * 0.75);
         this.updateMatrix(this.matrix.times(Mat4.translation(...posChange)))
-        if (this.matrix[1][3] + this.size[1][1] <= TERRAIN_BOUNDS[1])
+        if ((this.matrix[1][3] + this.size[1][1] <= TERRAIN_BOUNDS[1]) || (Math.abs(this.matrix[0][3] + this.size[0][0]) >= TERRAIN_BOUNDS[0]) || (Math.abs(this.matrix[2][3] + this.size[2][2]) >= TERRAIN_BOUNDS[2]))
             this.out_of_bounds = true;
 
         // No need to check collisions with the projectiles and the balloons because it is already checked by the balloons
@@ -446,11 +469,12 @@ class Projectile extends Collidable {
 }
 
 class Balloon extends Collidable {
-    constructor(size, initial_pos, durability, shape, material, shadow) 
+    constructor(size, initial_pos, durability, speed, shape, material, shadow) 
     {
         super(Mat4.identity(), size);
         this.originalHealth = durability;
         this.durability = durability;
+        this.speed = speed;
         this.pierceable = true;
         this.reachedEnd = false;
         this.initial_pos = initial_pos;
@@ -465,7 +489,7 @@ class Balloon extends Collidable {
 
     draw(context, program_state, dt, collidables, shadow_pass) 
     {
-        this.progress += dt * 0.5;
+        this.progress += dt * this.speed;
 
         // Stages represent its stages of motion - i.e. parabolic, sinusoidal, circular, etc.
         const stage1Time = Math.min(5, this.progress) // 0 <= t <= 5
@@ -505,22 +529,22 @@ class Balloon extends Collidable {
             const stage8Time = Math.min(135 - 130, this.progress - 130)
             matrix = Mat4.translation(0, 0, stage8Time * 2).times(matrix)
         }
-        if (this.progress >= 135) // 135 <= t <= 215
+        if (this.progress >= 135) // 135 <= t <= 207.5
         {
-            const stage9Time = Math.min(215 - 135, this.progress - 135)
+            const stage9Time = Math.min(207.5 - 135, this.progress - 135)
             matrix = Mat4.translation(stage9Time * 2, 0, Math.sin(stage9Time)).times(matrix)
         }
-        if (this.progress >= 215) // 215 <= t <= 309.25
+        if (this.progress >= 207.5) // 207.5 <= t <= 301.75
         {
-            const stage10Time = Math.min(309.25 - 215, this.progress - 215)
+            const stage10Time = Math.min(301.75 - 207.5, this.progress - 207.5)
             matrix = Mat4.translation(0, 2 * Math.sin(stage10Time), -2 * stage10Time).times(matrix)
         }
-        if (this.progress >= 309.25) // 309.25 <= t <= 314.25
+        if (this.progress >= 301.75) // 301.75 <= t <= 306.75
         {
-            const stage11Time = Math.min(314.25 - 309.25, this.progress - 309.25)
+            const stage11Time = Math.min(306.75 - 301.75, this.progress - 301.75)
             matrix = Mat4.translation(stage11Time, -stage11Time * stage11Time * 10 / 25, 0).times(matrix)
         }
-        if (this.progress >= 314.25)
+        if (this.progress >= 306.75)
             this.reachedEnd = true;
 
         this.updateMatrix(matrix)
@@ -606,7 +630,7 @@ function drawSkybox(context, program_state, shape, materials, shadow_pass) {
 }
 
 
-function drawWall(context, program_state, shape, wallMaterial, wallDimensions, textureScale = 1) {
+function drawWall(context, program_state, shape, wallMaterial, wallDimensions, textureScale = 1, shadow_pass) {
     const [wallWidth, wallHeight, wallDepth] = wallDimensions;
     const skyboxBoundary = 100;
     const halfDepth = wallDepth / 2; // Half depth of the wall for proper alignment
@@ -684,9 +708,10 @@ export class Project extends Scene {
             birch: new Shape_From_File("assets/BirchTree_2.obj"),
             rock: new Shape_From_File("assets/Rock_3.obj"),
             log: new Shape_From_File("assets/WoodLog.obj"),
-            crosshair: new Text_Line(1),
+            castle: new Shape_From_File("assets/Castle_Tower.obj"),
             health: new Text_Line(12),
             money: new Text_Line(15),
+            round: new Text_Line(20),
             powerup_pierce: new Text_Line(50),
             pierce_price: new Text_Line(50),
             powerup_speed: new Text_Line(50),
@@ -698,8 +723,8 @@ export class Project extends Scene {
         this.wallDimensions = [10, 10, 10];
 
         this.materials = {
-            phong: new Material(new Phong_Shader(), {
-                color: hex_color("#0000FF"), ambient: 0.5, specularity: 1.0
+            balloon: new Material(new Phong_Shader(), {
+                color: hex_color("#0000FF"), ambient: 0.8, diffusivity: 0.5, specularity: 0.8
             }),
             bound_box: new Material(new Phong_Shader(), {
                 color: hex_color("#FFFFFF", 0.1), ambient: 1.0, diffusivity: 1.0,
@@ -792,17 +817,34 @@ export class Project extends Scene {
                 ambient: 0.2,
             }),
             log: new Material(new Phong_Shader(), {
-                color: hex_color("635946")
+                color: hex_color("#635946")
+            }),
+            castle: new Material(new Phong_Shader(), {
+                color: hex_color("#8C8C8C"),
+                ambient: 0.2,
+                specularity: 0,
+
+            }),
+            dart: new Material(new Phong_Shader(), {
+                color: hex_color("#36454F"),
             }),
             text: new Material(new Textured_Phong(1), { 
                 ambient: 1, diffusivity: 0, specularity: 0, texture: new Texture("assets/text.png")
             }),
 
+            /*
             wall: new Material(new Textured_Phong(), {
                 color: hex_color("#53350A"),
                 ambient: 0.4, specularity: .4, diffusivity: .4,
                 
                 texture: new Texture("assets/Wallstone.png", "REPEAT") // Using REPEAT for texture wrap
+            }),
+            */
+
+            wall: new Material(new Shadow_Textured_Phong_Shader(1), {
+                color: hex_color("#53350A"), ambient: 0.4, diffusivity: 0.4, specularity: 0.4,
+                color_texture: new Texture("assets/Wallstone.png", "REPEAT"), // Using REPEAT for texture wrap
+                light_depth_texture: null
             })
 
 
@@ -823,30 +865,69 @@ export class Project extends Scene {
             new Nature(Mat4.translation(-85, 5, -85).times(Mat4.scale(10, 10, 10)).times(Mat4.rotation(Math.PI / 4, 0, 1, 0)), Mat4.scale(13, 7, 12.5), this.shapes.rock, this.materials.rock, this.materials.shadow, Mat4.translation(0.1, -0.2, -0.05,)),
             new Nature(Mat4.translation(-50, 1, -50).times(Mat4.scale(8, 16, 12)).times(Mat4.rotation(Math.PI / 2, 0, 1, 0)), Mat4.scale(7., 7.8, 9.5), this.shapes.rock, this.materials.rock2, this.materials.shadow, Mat4.translation(-0.1, -0.8, -0.2,)), 
             new Nature(Mat4.translation(-50, 18, -50).times(Mat4.scale(8, 4, 10)).times(Mat4.rotation(Math.PI / 2, 0, 1, 0)), Mat4.scale(8, 2, 9), this.shapes.rock, this.materials.rock2, this.materials.shadow, Mat4.translation(-0.2, 0, -0.2)),
-            new Nature(Mat4.translation(0, -0.1, 50), Mat4.scale(0.5, 0.6, 2), this.shapes.log, this.materials.log, this.materials.shadow, Mat4.translation(0, -0.1, -0.4))
+            new Nature(Mat4.translation(0, -0.1, 50), Mat4.scale(0.5, 0.6, 2), this.shapes.log, this.materials.log, this.materials.shadow, Mat4.translation(0, -0.1, -0.4)),
+            new Nature(Mat4.translation(85, 5, -90).times(Mat4.rotation(-Math.PI / 2, 1, 0 , 0)).times(Mat4.rotation(Math.PI / 2, 0, 0, 1)).times(Mat4.scale(5, 5, 5,)), Mat4.scale(5.5, 6, 5.5,), this.shapes.castle, this.materials.castle, this.materials.shadow, Mat4.translation(0, 0, 0)),
+            // Walls
+            new Nature(Mat4.translation(0, 0, 100).times(Mat4.scale(0, 0, 0)), Mat4.scale(100, 8.5, 5,), this.shapes.bounding_box, this.materials.tree, this.materials.shadow, Mat4.translation(0, 0, 0)),
+            new Nature(Mat4.translation(0, 0, -100).times(Mat4.scale(0, 0, 0)), Mat4.scale(100, 8.5, 5,), this.shapes.bounding_box, this.materials.tree, this.materials.shadow, Mat4.translation(0, 0, 0)),
+            new Nature(Mat4.translation(-100, 0, 0).times(Mat4.scale(0, 0, 0)), Mat4.scale(5, 8.5, 100,), this.shapes.bounding_box, this.materials.tree, this.materials.shadow, Mat4.translation(0, 0, 0)),
+            new Nature(Mat4.translation(100, 0, 0).times(Mat4.scale(0, 0, 0)), Mat4.scale(5, 8.5, 100,), this.shapes.bounding_box, this.materials.tree, this.materials.shadow, Mat4.translation(0, 0, 0)),
+
+
         ];
+
+
         player = new Player(Mat4.translation(...INITIAL_POSITION), this.nature)
 
-        this.addBalloon = () => {
-            this.balloons.push(new Balloon(Mat4.scale(0.7, 0.7, 0.7), Mat4.translation(-100, 0, 0), 2, this.shapes.sphere, this.materials.phong, this.materials.shadow))
+        this.currentWave = 0;
+        this.currentBalloons = null;
+
+        this.addBalloon = (durability, speed) => {
+            this.balloons.push(new Balloon(Mat4.scale(0.7, 0.7, 0.7), Mat4.translation(-100, 0, 0), durability, speed, this.shapes.sphere, this.materials.balloon, this.materials.shadow))
         }
 
         this.spawnBalloons = function() {
-            this.addBalloon();
-            setTimeout(this.spawnBalloons.bind(this), 1500)
+            if (this.currentWave >= WAVE_INFORMATION.length)
+                return; 
+            // Get new wave
+            if (this.currentBalloons === null)
+            {
+                this.currentBalloons = [...WAVE_INFORMATION[this.currentWave].balloons]
+            }
+            if (this.currentBalloons.length != 0) {
+                // Sample random index balloon to spawn
+                const indx = Math.floor((Math.random() * this.currentBalloons.length))
+                const key = Object.keys(this.currentBalloons[indx])[0]
+                this.addBalloon(Number(key), WAVE_INFORMATION[this.currentWave].balloon_speed)
+                this.currentBalloons[indx][key] -= 1;
+                if (this.currentBalloons[indx][key] == 0)
+                    this.currentBalloons.splice(indx, 1)
+                setTimeout(this.spawnBalloons.bind(this), WAVE_INFORMATION[this.currentWave].spawn_interval)
+
+            }
+            else if (this.balloons.length == 0) // Do not start new wave until all current balloons are despawned
+            {
+                this.currentBalloons = null;
+                this.currentWave += 1
+                setTimeout(this.spawnBalloons.bind(this), 5000)
+            }
+            else
+            {
+                setTimeout(this.spawnBalloons.bind(this), 5000)
+            }
         }
 
         this.spawnBalloons();
 
         this.health = 100;
-        this.money = 10;
+        this.money = 0;
 
         // Powerups and their prices
         this.projectilePierceTier = 0; // Index of projectilePierces
         this.projectilePierces = [1, 2, 3, 5, 10, 20]
         this.projectilePiercePrices = [10, 30, 60, 100, 500]
         this.projectileSpeedTier = 0;
-        this.projectileSpeeds = [1, 2, 3.5, 8]
+        this.projectileSpeeds = [1, 2, 3.5, 6]
         this.projectileSpeedPrices = [40, 100, 600]
         this.shootCooldownTier = 0;
         this.shootCooldowns = [1000, 500, 250, 100, 50];
@@ -869,12 +950,12 @@ export class Project extends Scene {
                 const pierce = this.projectilePierces[this.projectilePierceTier]
                 let lookDirection = camera_matrix.times(vec4(0, 0, 1, 0));
                 if (!this.multishot)
-                    this.projectiles.push(new Projectile(pierce, Mat4.translation(...origin), Mat4.scale(1/2, 1/2, 1/2), lookDirection.times(40 * projSpeed), pitch, yaw, this.shapes.projectile, this.materials.phong, this.materials.shadow));
+                    this.projectiles.push(new Projectile(pierce, Mat4.translation(...origin), Mat4.scale(1/3, 1/3, 1/3), lookDirection.times(40 * projSpeed), pitch, yaw, this.shapes.projectile, this.materials.dart, this.materials.shadow));
                 else
                 {
-                    this.projectiles.push(new Projectile(pierce, Mat4.translation(...origin), Mat4.scale(1/2, 1/2, 1/2), Mat4.rotation(Math.PI / 12, 0, 1, 0).times(lookDirection).times(40 * projSpeed), pitch - Math.PI / 12, yaw, this.shapes.projectile, this.materials.phong, this.materials.shadow));
-                    this.projectiles.push(new Projectile(pierce, Mat4.translation(...origin), Mat4.scale(1/2, 1/2, 1/2), lookDirection.times(40 * projSpeed), pitch, yaw, this.shapes.projectile, this.materials.phong, this.materials.shadow));
-                    this.projectiles.push(new Projectile(pierce, Mat4.translation(...origin), Mat4.scale(1/2, 1/2, 1/2), Mat4.rotation(-Math.PI / 12, 0, 1, 0).times(lookDirection).times(40 * projSpeed), pitch + Math.PI / 12, yaw, this.shapes.projectile, this.materials.phong, this.materials.shadow));
+                    this.projectiles.push(new Projectile(pierce, Mat4.translation(...origin), Mat4.scale(1/3, 1/3, 1/3), Mat4.rotation(Math.PI / 12, 0, 1, 0).times(lookDirection).times(40 * projSpeed), pitch - Math.PI / 12, yaw, this.shapes.projectile, this.materials.dart, this.materials.shadow));
+                    this.projectiles.push(new Projectile(pierce, Mat4.translation(...origin), Mat4.scale(1/3, 1/3, 1/3), lookDirection.times(40 * projSpeed), pitch, yaw, this.shapes.projectile, this.materials.dart, this.materials.shadow));
+                    this.projectiles.push(new Projectile(pierce, Mat4.translation(...origin), Mat4.scale(1/3, 1/3, 1/3), Mat4.rotation(-Math.PI / 12, 0, 1, 0).times(lookDirection).times(40 * projSpeed), pitch + Math.PI / 12, yaw, this.shapes.projectile, this.materials.dart, this.materials.shadow));
                 }
                 setTimeout(() => this.canShoot = true, this.shootCooldowns[this.shootCooldownTier]);
             }
@@ -928,31 +1009,31 @@ export class Project extends Scene {
     drawHUD(context, program_state, shadow_pass) {
         if (shadow_pass)
         {
-            this.shapes.crosshair.set_string("+", context.context)
             this.shapes.money.set_string("Money:$" +  String(this.money), context.context)
             this.shapes.health.set_string("Health:" + String(this.health), context.context)
+            this.shapes.round.set_string("Round:" + String(this.currentWave + 1), context.context)
             this.shapes.powerup_pierce.set_string("Pierce Tier:" + String(this.projectilePierceTier + 1), context.context)
             this.shapes.powerup_speed.set_string("Speed Tier:" + String(this.projectileSpeedTier + 1), context.context)
             this.shapes.powerup_throw.set_string("Throw Tier:" + String(this.shootCooldownTier + 1), context.context)
             this.shapes.powerup_multishot.set_string("Multishot:" + (this.ownsMultishot ? (this.multishot ? "On" : "Off") : "$500"), context.context)
             const mat = Mat4.translation(...origin).times(camera_matrix).times(Mat4.scale(0.01, 0.01, 0.01))
-
-            let lookDirection = camera_matrix.times(vec4(0, 0, -0.6, 0))
-            this.shapes.crosshair.draw(context, program_state, Mat4.translation(...lookDirection).times(mat), this.materials.text )
             
-            lookDirection = camera_matrix.times(vec4(0.25, 0.23, -0.6, 0))
+            let lookDirection = camera_matrix.times(vec4(0.25, 0.23, -0.6, 0))
             this.shapes.money.draw(context, program_state, Mat4.translation(...lookDirection).times(mat), this.materials.text )
 
             lookDirection = camera_matrix.times(vec4(0.25, 0.2, -0.6, 0))
             this.shapes.health.draw(context, program_state, Mat4.translation(...lookDirection).times(mat), this.materials.text )
 
+            lookDirection = camera_matrix.times(vec4(0.25, 0.17, -0.6, 0))
+            this.shapes.round.draw(context, program_state, Mat4.translation(...lookDirection).times(mat), this.materials.text )
             if (!this.fullHUD)
                 return;
 
-            lookDirection = camera_matrix.times(vec4(0.25, 0.17, -0.6, 0))
+            let currY = 0.14
+            lookDirection = camera_matrix.times(vec4(0.25, currY, -0.6, 0))
             this.shapes.powerup_multishot.draw(context, program_state, Mat4.translation(...lookDirection).times(mat).times(Mat4.scale(0.9, 0.9, 0.9)), this.materials.text )
 
-            let currY = 0.14
+            currY -= 0.03;
 
             lookDirection = camera_matrix.times(vec4(0.25, currY, -0.6, 0))
             this.shapes.powerup_pierce.draw(context, program_state, Mat4.translation(...lookDirection).times(mat).times(Mat4.scale(0.9, 0.9, 0.9)), this.materials.text )
@@ -998,6 +1079,7 @@ export class Project extends Scene {
         // Bind it to TinyGraphics
         this.light_depth_texture = new Buffered_Texture(this.lightDepthTexture);
         this.materials.terrain.light_depth_texture = this.light_depth_texture
+        this.materials.wall.light_depth_texture = this.light_depth_texture
 
         this.lightDepthTextureSize = LIGHT_DEPTH_TEX_SIZE;
         gl.bindTexture(gl.TEXTURE_2D, this.lightDepthTexture);
@@ -1117,7 +1199,7 @@ export class Project extends Scene {
 
         drawTerrain(context, program_state, this.shapes.ground, shadow_pass ? this.materials.terrain : this.materials.pure);
         drawSkybox(context, program_state, this.shapes.square, [this.materials.skybox_top, this.materials.skybox_front, this.materials.skybox_left, this.materials.skybox_right, this.materials.skybox_back], shadow_pass );
-        drawWall(context, program_state, this.shapes.zoomedBox, this.materials.wall, this.wallDimensions, 1);
+        drawWall(context, program_state, this.shapes.zoomedBox, shadow_pass ? this.materials.wall : this.materials.pure, this.wallDimensions, 1);
 
         this.drawHUD(context, program_state, shadow_pass)
 
@@ -1129,7 +1211,7 @@ export class Project extends Scene {
         console.time("Initialization")
 
         if (!context.scratchpad.controls) {
-            this.children.push(context.scratchpad.controls = new Movement());
+            this.children.push(context.scratchpad.controls = new Movement(this.fireprojectile.bind(this)));
             origin = INITIAL_POSITION;
         }
 
