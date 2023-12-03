@@ -7,6 +7,7 @@ import {
     HandLandmarker,
     FilesetResolver
 } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0";
+let {KalmanFilter} = kalmanFilter;
 
 const {
     Vector, Vector3, vec, vec3, vec4, color, hex_color, Shader, Matrix, Mat4, Light, Shape, Material, Scene, Texture,
@@ -19,8 +20,6 @@ const white = new Material(new defs.Basic_Shader())
 // Mouse movements
 let dx = 0;
 let dy = 0;
-let avgDx = Array(5).fill(0);
-let avgDy = Array(5).fill(0);
 
 // Mouse sensitivity
 const sensitivity = 5;
@@ -46,6 +45,22 @@ const WAVE_INFORMATION = [
 ]
 const INITIAL_POSITION = vec3(0, 0, 8) 
 let player; // Create player object on scene initialization to deal with collisions
+
+
+// Filter for smoothing hand tracking
+let previousCorrected = null;
+
+const kFilter = new KalmanFilter({ 
+    observation: {
+        sensorDimension: 3,
+        name: 'sensor'
+    },
+    dynamic: {
+        name: 'constant-speed',
+        timeStep: 0.1, 
+        covariance: [3, 3, 3, 4, 4, 4]
+    }
+})
 
 // Mediapipe Variables and setup
 let previousPos = null
@@ -170,37 +185,33 @@ async function predictWebcam(shootFunction) {
   }
   if (results.landmarks.length != 0) {
     const index = results.landmarks[0]["8"]
+    const observation = [index.x, index.y, index.z]
+    const predicted = kFilter.predict({
+        previousCorrected
+    });
+    const correctedState = kFilter.correct({
+        predicted, 
+        observation
+    })
+
     if (inFiringPosition(results.landmarks) && (isFiring(results.landmarks)))
     {   
         shootFunction()
     }
-    if (previousPos !== null && inFiringPosition(results.landmarks))
+    if (previousCorrected !== null && inFiringPosition(results.landmarks))
     {
-        for (let i = 0; i < avgDx.length - 1; i++)
-        {
-            avgDx[i + 1] = avgDx[i]
-            avgDy[i + 1] = avgDy[i]
-        }
-        avgDx[0] = (index.x - previousPos.x) * -3000
-        avgDy[0] = (index.y - previousPos.y) * 3000
-        dx = avgDx.reduce((partialSum, dx) => partialSum + dx, 0) / avgDx.length
-        dy = avgDy.reduce((partialSum, dy) => partialSum + dy, 0) / avgDy.length
-    }
-    else 
-    {
-        for (let i = 0; i < avgDx.length - 1; i++)
-        {
-            avgDx[i + 1] = avgDx[i]
-            avgDy[i + 1] = avgDy[i]
-        }
-        avgDx[0] = 0
-        avgDy[0] = 0
-        dx = avgDx.reduce((partialSum, dx) => partialSum + dx, 0) / avgDx.length
-        dy = avgDy.reduce((partialSum, dy) => partialSum + dy, 0) / avgDy.length
-    }
-    previousPos = index;
 
-}
+        dx = (correctedState.mean[0] - previousCorrected.mean[0]) * -3000
+        dy = (correctedState.mean[1] - previousCorrected.mean[1]) * 3000
+
+    }
+    else {
+        dx = 0;
+        dy = 0;
+    }
+    previousCorrected = correctedState;
+    }
+    
   // Call this function again to keep predicting when the browser is ready.
   if (webcamRunning === true) {
     window.requestAnimationFrame(() => predictWebcam(shootFunction));
@@ -1231,7 +1242,7 @@ export class Project extends Scene {
         }
 
         // The position of the light
-        this.light_position =  Mat4.rotation(t / 50, 0, 1, 0).times(vec4(50, 50, 0, 1));
+        this.light_position =  Mat4.rotation(-t / 50, 0, 1, 0).times(vec4(50, 60, 0, 1));
         // The color of the light
         this.light_color = color(
             0.667 + Math.sin(t/500) / 3,
@@ -1243,7 +1254,7 @@ export class Project extends Scene {
         // This is a rough target of the light.
         // Although the light is point light, we need a target to set the POV of the light
         this.light_view_target = vec4(0, 0, 0, 1);
-        this.light_field_of_view = 170 * Math.PI / 180; // 180 degree
+        this.light_field_of_view =  170 * Math.PI / 180; // 170 degrees
 
         program_state.lights = [new Light(this.light_position, this.light_color, 100000)];
 
