@@ -85,6 +85,9 @@ const createHandLandmarker = async () => {
 };
 createHandLandmarker();
 
+// Collision Statistics
+let collisionTimes = 0
+
 // Check if webcam access is supported.
 const hasGetUserMedia = () => !!navigator.mediaDevices?.getUserMedia;
 
@@ -371,6 +374,7 @@ class Collidable {
 
     checkCollision(other) {
         console.time("Collision checking")
+        collisionTimes += 1
 
         let test;
         if (this.boundingBox && other.boundingBox) // Box-Box collision
@@ -559,6 +563,9 @@ class Balloon extends Collidable {
             this.reachedEnd = true;
 
         this.updateMatrix(matrix)
+
+        // Add to Balloon Clusters
+        BalloonCluster.progressLookup(this.progress).addChild(this);
         
         // Check for collision with any projectiles
         let collided = false;
@@ -575,6 +582,130 @@ class Balloon extends Collidable {
         projectile.durability -= numPierces;
         this.durability -= numPierces;
     }
+}
+
+// Clusters generation
+let matrices = [
+    [-100.7, -94.320408, -0.7, 10.618534594585608, -0.7, 0.7],
+    [-95.66775, -81.84021999999997, 9.3, 10.7, -0.7, 0.7],
+    [
+    -83.15690999999998, -3.356424999999919, 9.3, 10.7,
+    -3.1999920102026698, 3.199973888841944,
+    ],
+    [
+    -4.699907794741054, 46.69988392120507, 9.3, 10.7,
+    -25.739604294753025, 25.66014936880033,
+    ],
+    [
+    -4.699998781059446, 21.609522329090687, 9.3, 10.7,
+    24.26040620567531, 75.66002161878498,
+    ],
+    [20.3, 21.7, 9.3, 10.7, 74.28086134350032, 85.62312134350042],
+    [
+    -69.67243200000088, 21.670167999999318, 9.3, 10.7,
+    83.26019702864511, 86.66018525678675,
+    ],
+    [-69.7, -68.3, 9.3, 10.7, 85.14988886803475, 96.49405286803527],
+    [
+    -69.64838399999861, 91.68417600000141, 9.3, 10.7, 94.11109684383285,
+    97.51108836709231,
+    ],
+    [
+    90.3, 91.7, 7.300026230675379, 12.699999999945643,
+    -94.3612157858916, 95.46632021410906,
+    ],
+    [
+    90.32259600000104, 96.6935760000007, -0.6698797261497436,
+    10.704236549277036, -94.38279978588952, -92.98279978588951,
+    ],
+];
+
+class BalloonCluster extends Collidable {
+  static clusters = [
+    new BalloonCluster(matrices[0]),
+    new BalloonCluster(matrices[1]),
+    new BalloonCluster(matrices[2]),
+    new BalloonCluster(matrices[3]),
+    new BalloonCluster(matrices[4]),
+    new BalloonCluster(matrices[5]),
+    new BalloonCluster(matrices[6]),
+    new BalloonCluster(matrices[7]),
+    new BalloonCluster(matrices[8]),
+    new BalloonCluster(matrices[9]),
+    new BalloonCluster(matrices[10]),
+  ];
+
+  static progressLookup(progress) {
+    if (progress >= 309.25)
+      // 309.25 <= t <= 314.25
+      return this.clusters[10];
+    else if (progress >= 215)
+      // 215 <= t <= 309.25
+      return this.clusters[9];
+    else if (progress >= 135) return this.clusters[8];
+    else if (progress >= 130) return this.clusters[7];
+    else if (progress >= 85) return this.clusters[6];
+    else if (progress >= 80) return this.clusters[5];
+    else if (progress >= 60) return this.clusters[4];
+    else if (progress >= 41.4) return this.clusters[3];
+    else if (progress >= 10) return this.clusters[2];
+    else if (progress >= 5) return this.clusters[1];
+    else return this.clusters[0];
+  }
+
+  constructor(matrix, collidables=[]) {
+    super(matrix, 0);
+    this.balloons = [];
+    this.collidables = collidables;
+    this.updateBoundBox();
+  }
+
+  updateBoundBox() {
+    this.min_x = this.matrix[0];
+    this.max_x = this.matrix[1];
+    this.min_y = this.matrix[2];
+    this.max_y = this.matrix[3];
+    this.min_z = this.matrix[4];
+    this.max_z = this.matrix[5];
+  }
+
+  addChild(child) {
+    this.balloons.push(child);
+  }
+
+  addChildren(children) {
+    children.forEach((collidable) => {
+      this.balloons.add(collidable);
+    });
+  }
+
+  updateCollidables(collidables) {
+    this.collidables = collidables
+  }
+
+  checkCollisions() {
+    this.collidables.forEach((collider) => {
+      this.checkCollision(collider);
+    });
+  }
+
+  checkCollision(other) {
+    // Check for collision with any projectiles
+    let test = false;
+    test = super.checkCollision(other);
+
+    // Test balloons boxes if hit
+    if (test) {
+      this.balloons.forEach((collider) => {
+        collider.checkCollision(other);
+      });
+    }
+  }
+
+  clear() {
+    // Clear the current array
+    this.balloons.length = 0;
+  }
 }
 
 class Nature extends Collidable {
@@ -1184,6 +1315,14 @@ export class Project extends Scene {
         
         console.time("Draws balloons")
         console.log("# Balloons: %d", this.balloons.length)
+        
+        // Cluster Collision Test
+        for (let i = 0; i < BalloonCluster.clusters.length; i++) {
+            let cluster = BalloonCluster.clusters[i];
+            cluster.updateCollidables(this.projectiles)
+            cluster.checkCollisions()
+        }
+
         for (let i = 0; i < this.balloons.length; i++)
         {
             if (this.balloons[i].durability != 0 && !this.balloons[i].reachedEnd)
@@ -1293,6 +1432,13 @@ export class Project extends Scene {
         this.render_scene(context, program_state, true, true, true);
 
         console.timeEnd("Step 2")
+
+        // Clear balloon clusters
+        for (let i = 0; i < BalloonCluster.clusters.length; i++)
+            BalloonCluster.clusters[i].clear()
+        
+        console.log("Times of Collision Checks: %d", collisionTimes);
+        collisionTimes = 0;
 
         /*
         // Step 3: display the textures
