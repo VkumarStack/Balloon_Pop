@@ -35,7 +35,7 @@ const TERRAIN_BOUNDS = vec3(100, 0, 100);
 const BALLOON_HEALTH = [hex_color("#ff0000"), hex_color("#ff0000"), hex_color("#0092e3"), hex_color("#63a800"), hex_color("#ffd100"), hex_color("#ff2b51"), hex_color("#141414") ]
 
 const WAVE_INFORMATION = [
-    { balloons: [{1: 10}], balloon_speed: 0.5, spawn_interval: 3000 }, 
+    { balloons: [{1: 100}], balloon_speed: 0.5, spawn_interval: 300 }, 
     { balloons: [{1: 10}, {2: 5}], balloon_speed: 0.6, spawn_interval: 2500 }, 
     { balloons: [{1: 20}, {2: 15}, {3: 5}], balloon_speed: 0.7, spawn_interval: 2000 }, 
     { balloons: [{1: 30}, {2: 25}, {3: 15}, {4: 5}], balloon_speed: 0.8, spawn_interval: 2000}, 
@@ -1434,8 +1434,9 @@ export class Project extends Scene {
         console.timeEnd("Step 2")
 
         // Clear balloon clusters
+        console.log("total register: %d", totalBalloonsRegistered)
         for (let i = 0; i < BalloonCluster.clusters.length; i++)
-            BalloonCluster.clusters[i].clear()
+            BalloonCluster.clusters[i].clear();
         
         console.log("Times of Collision Checks: %d", collisionTimes);
         collisionTimes = 0;
