@@ -341,6 +341,90 @@ class Movement extends defs.Movement_Controls {
     }
 }
 
+// Dedicated class to describe movements of objects on scenes
+// Remark: for now this is a rough prototype with NO ERROR HANDLING and optimization.
+class Path {
+    constructor() {
+        this.intervals = []
+    }
+
+    addInterval(start, end, formula) {
+        this.intervals.push(new Interval(start, end, formula));
+    }
+
+    // For now the method assumes intervals are consecutive and sorted
+    pick(progress) {
+        for (let i = 0; i < this.intervals.length; i++) {
+            if (progress <= this.intervals[i].end)
+                return this.intervals[i].pick(progress);
+        }
+    }
+
+    // Higher dp guarantees higher precision
+    buildCluster(dp = .5) {
+        if (this.intervals.length == 0)
+            return null;
+        
+        let progress = this.intervals[0].start;
+        let intervalID = 0;
+        let clusters = [];
+        let min_x = Number.POSITIVE_INFINITY, 
+            max_x = Number.NEGATIVE_INFINITY, 
+            min_y = Number.POSITIVE_INFINITY, 
+            max_y = Number.NEGATIVE_INFINITY,
+            min_z = Number.POSITIVE_INFINITY, 
+            max_z = Number.NEGATIVE_INFINITY;
+
+        while (dp <= this.intervals[this.intervals.length - 1].end) {
+            dp = this.pick(progress);
+
+            min_x = Math.min(min_x, dp[0]);
+            min_y = Math.min(min_y, dp[1]);
+            min_z = Math.min(min_z, dp[2]);
+            max_x = Math.max(max_x, dp[0]);
+            max_y = Math.max(max_y, dp[1]);
+            max_z = Math.max(max_z, dp[2]);
+
+            progress += dp;
+            if (progress > this.intervals[intervalID]) {
+                intervalID += 1;
+                clusters.push(new BalloonCluster([
+                    min_x, max_x, min_y, max_y, min_z, max_z
+                ]));
+                
+                min_x = Number.POSITIVE_INFINITY;
+                max_x = Number.NEGATIVE_INFINITY;
+                min_y = Number.POSITIVE_INFINITY;
+                max_y = Number.NEGATIVE_INFINITY;
+                min_z = Number.POSITIVE_INFINITY;
+                max_z = Number.NEGATIVE_INFINITY;
+            }
+        }
+
+        return clusters;
+    }
+}
+
+// A subpath
+class Interval {
+    constructor(start, end, formula) {
+        this.start = start;
+        this.end = end;
+        this.formula = formula;
+    }
+
+    pick(progress) {
+        if (progress < this.start || progress > this.end)
+            console.error()
+        else {
+            const stageTime = 
+                Math.min(this.end - this.start, progress - this.start);
+            const compute = this.formula(stageTime);
+            return compute;
+        }
+    }
+}
+
 // Objects that have a collision box should extend this class
 // Matrix is the Mat4 matrix that represents the object's position, scaling, rotation, etc.
 // Size is the size of the bounding box of the object, represented as a Mat4 scale only (do not rotate or translate the size matrix)
@@ -497,6 +581,9 @@ class Balloon extends Collidable {
 
         // Balloons will follow a fixed path, and how exactly it moves on this path will be based on this progress range
         this.progress = 0;
+
+        // Update Cluster - Only used to gather optimal blocking
+        this.clusterNavigate = false
     }
 
     draw(context, program_state, dt, collidables, shadow_pass) 
@@ -573,6 +660,12 @@ class Balloon extends Collidable {
         projectile.durability -= numPierces;
         this.durability -= numPierces;
     }
+
+    // Set Cluster Navigate
+    setClusterNavigate() {
+        this.clusterNavigate = true
+    }
+
 }
 
 // Clusters generation
@@ -627,11 +720,9 @@ class BalloonCluster extends Collidable {
   ];
 
   static progressLookup(progress) {
-    if (progress >= 309.25)
-      // 309.25 <= t <= 314.25
+    if (progress >= 301.75)
       return this.clusters[10];
-    else if (progress >= 215)
-      // 215 <= t <= 309.25
+    else if (progress >= 207.5)
       return this.clusters[9];
     else if (progress >= 135) return this.clusters[8];
     else if (progress >= 130) return this.clusters[7];
