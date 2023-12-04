@@ -348,6 +348,7 @@ class Path {
         this.intervals = []
     }
 
+    // formula returns [x, y, z]
     addInterval(start, end, formula) {
         this.intervals.push(new Interval(start, end, formula));
     }
