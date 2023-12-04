@@ -35,7 +35,7 @@ const TERRAIN_BOUNDS = vec3(100, 0, 100);
 const BALLOON_HEALTH = [hex_color("#ff0000"), hex_color("#ff0000"), hex_color("#0092e3"), hex_color("#63a800"), hex_color("#ffd100"), hex_color("#ff2b51"), hex_color("#141414") ]
 
 const WAVE_INFORMATION = [
-    { balloons: [{1: 300}], balloon_speed: 0.5, spawn_interval: 300 }, 
+    { balloons: [{1: 10}], balloon_speed: 0.5, spawn_interval: 3000 }, 
     { balloons: [{1: 10}, {2: 5}], balloon_speed: 0.6, spawn_interval: 2500 }, 
     { balloons: [{1: 20}, {2: 15}, {3: 5}], balloon_speed: 0.7, spawn_interval: 2000 }, 
     { balloons: [{1: 30}, {2: 25}, {3: 15}, {4: 5}], balloon_speed: 0.8, spawn_interval: 2000}, 
@@ -373,7 +373,6 @@ class Collidable {
     }
 
     checkCollision(other) {
-        console.time("Collision checking")
         collisionTimes += 1
 
         let test;
@@ -415,15 +414,12 @@ class Collidable {
         }
         // Add the collided object to the list of collided objects (and this object to the other object's list of collided objects)
         if (test) {
-            console.log("Hit")
             if (!this.collidedObjects.has(other)) {
                 this.collidedObjects.add(other);
                 other.collidedObjects.add(this);
                 this.handleCollision(other);
             }
         }
-
-        console.timeEnd("Collision checking")
 
         return test;
     }
@@ -572,6 +568,7 @@ class Balloon extends Collidable {
     }
 
     handleCollision(projectile) {
+        console.log("Hit - Handle collision")
         const numPierces = Math.min(this.durability, projectile.durability)
         projectile.durability -= numPierces;
         this.durability -= numPierces;
@@ -649,7 +646,7 @@ class BalloonCluster extends Collidable {
 
   constructor(matrix, collidables=[]) {
     super(matrix, 0);
-    this.balloons = [];
+    this.balloons = new Set()
     this.collidables = collidables;
     this.updateBoundBox();
   }
@@ -664,13 +661,7 @@ class BalloonCluster extends Collidable {
   }
 
   addChild(child) {
-    this.balloons.push(child);
-  }
-
-  addChildren(children) {
-    children.forEach((collidable) => {
-      this.balloons.add(collidable);
-    });
+    this.balloons.add(child);
   }
 
   updateCollidables(collidables) {
