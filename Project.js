@@ -35,7 +35,7 @@ const TERRAIN_BOUNDS = vec3(100, 0, 100);
 const BALLOON_HEALTH = [hex_color("#ff0000"), hex_color("#ff0000"), hex_color("#0092e3"), hex_color("#63a800"), hex_color("#ffd100"), hex_color("#ff2b51"), hex_color("#141414") ]
 
 const WAVE_INFORMATION = [
-    { balloons: [{1: 100}], balloon_speed: 0.5, spawn_interval: 300 }, 
+    { balloons: [{1: 300}], balloon_speed: 0.5, spawn_interval: 300 }, 
     { balloons: [{1: 10}, {2: 5}], balloon_speed: 0.6, spawn_interval: 2500 }, 
     { balloons: [{1: 20}, {2: 15}, {3: 5}], balloon_speed: 0.7, spawn_interval: 2000 }, 
     { balloons: [{1: 30}, {2: 25}, {3: 15}, {4: 5}], balloon_speed: 0.8, spawn_interval: 2000}, 
@@ -415,6 +415,7 @@ class Collidable {
         }
         // Add the collided object to the list of collided objects (and this object to the other object's list of collided objects)
         if (test) {
+            console.log("Hit")
             if (!this.collidedObjects.has(other)) {
                 this.collidedObjects.add(other);
                 other.collidedObjects.add(this);
@@ -567,13 +568,6 @@ class Balloon extends Collidable {
         // Add to Balloon Clusters
         BalloonCluster.progressLookup(this.progress).addChild(this);
         
-        // Check for collision with any projectiles
-        let collided = false;
-        collidables.forEach((collidable) => {
-            if (this.checkCollision(collidable)) {
-                collided = true;
-            }
-        })
         this.shape.draw(context, program_state, this.matrix.times(this.size), shadow_pass ? this.material.override(BALLOON_HEALTH[this.durability]) : this.shadow)
     }
 
@@ -684,9 +678,9 @@ class BalloonCluster extends Collidable {
   }
 
   checkCollisions() {
-    this.collidables.forEach((collider) => {
-      this.checkCollision(collider);
-    });
+        this.collidables.forEach((collidable) => {
+        this.checkCollision(collidable);
+        });
   }
 
   checkCollision(other) {
@@ -696,9 +690,9 @@ class BalloonCluster extends Collidable {
 
     // Test balloons boxes if hit
     if (test) {
-      this.balloons.forEach((collider) => {
-        collider.checkCollision(other);
-      });
+        this.balloons.forEach((balloon) => {
+            balloon.checkCollision(other);
+        });
     }
   }
 
@@ -1315,13 +1309,6 @@ export class Project extends Scene {
         
         console.time("Draws balloons")
         console.log("# Balloons: %d", this.balloons.length)
-        
-        // Cluster Collision Test
-        for (let i = 0; i < BalloonCluster.clusters.length; i++) {
-            let cluster = BalloonCluster.clusters[i];
-            cluster.updateCollidables(this.projectiles)
-            cluster.checkCollisions()
-        }
 
         for (let i = 0; i < this.balloons.length; i++)
         {
@@ -1397,6 +1384,13 @@ export class Project extends Scene {
 
         program_state.lights = [new Light(this.light_position, this.light_color, 100000)];
 
+        // Cluster Collision Test
+        for (let i = 0; i < BalloonCluster.clusters.length; i++) {
+            let cluster = BalloonCluster.clusters[i];
+            cluster.updateCollidables(this.projectiles)
+            cluster.checkCollisions()
+        }
+
         console.timeEnd("Initialization")
 
 
@@ -1434,7 +1428,6 @@ export class Project extends Scene {
         console.timeEnd("Step 2")
 
         // Clear balloon clusters
-        console.log("total register: %d", totalBalloonsRegistered)
         for (let i = 0; i < BalloonCluster.clusters.length; i++)
             BalloonCluster.clusters[i].clear();
         
