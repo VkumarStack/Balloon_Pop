@@ -967,9 +967,9 @@ export class Project extends Scene {
                     this.projectiles.push(new Projectile(pierce, Mat4.translation(...origin), Mat4.scale(1/3, 1/3, 1/3), lookDirection.times(40 * projSpeed), pitch, yaw, this.shapes.projectile, this.materials.dart, this.materials.shadow));
                 else
                 {
-                    this.projectiles.push(new Projectile(pierce, Mat4.translation(...origin), Mat4.scale(1/3, 1/3, 1/3), Mat4.rotation(Math.PI / 12, 0, 1, 0).times(lookDirection).times(40 * projSpeed), pitch - Math.PI / 12, yaw, this.shapes.projectile, this.materials.dart, this.materials.shadow));
+                    this.projectiles.push(new Projectile(pierce, Mat4.translation(...origin), Mat4.scale(1/3, 1/3, 1/3), Mat4.rotation(Math.PI / 50, 0, 1, 0).times(lookDirection).times(40 * projSpeed), pitch - Math.PI / 50, yaw, this.shapes.projectile, this.materials.dart, this.materials.shadow));
                     this.projectiles.push(new Projectile(pierce, Mat4.translation(...origin), Mat4.scale(1/3, 1/3, 1/3), lookDirection.times(40 * projSpeed), pitch, yaw, this.shapes.projectile, this.materials.dart, this.materials.shadow));
-                    this.projectiles.push(new Projectile(pierce, Mat4.translation(...origin), Mat4.scale(1/3, 1/3, 1/3), Mat4.rotation(-Math.PI / 12, 0, 1, 0).times(lookDirection).times(40 * projSpeed), pitch + Math.PI / 12, yaw, this.shapes.projectile, this.materials.dart, this.materials.shadow));
+                    this.projectiles.push(new Projectile(pierce, Mat4.translation(...origin), Mat4.scale(1/3, 1/3, 1/3), Mat4.rotation(-Math.PI / 50, 0, 1, 0).times(lookDirection).times(40 * projSpeed), pitch + Math.PI / 50, yaw, this.shapes.projectile, this.materials.dart, this.materials.shadow));
                 }
                 setTimeout(() => this.canShoot = true, this.shootCooldowns[this.shootCooldownTier]);
             }
