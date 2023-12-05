@@ -697,6 +697,7 @@ export class Project extends Scene {
         this.shapes = {
             projectile: new defs.Cone_Tip(5, 5),
             sphere: new Subdivision_Sphere(4),
+            healthBall : new Subdivision_Sphere(4),
             bounding_box: new Cube_Outline(),
             ground: new Cube(),
             zoomedSquare : new ZoomedOutTextureCube(),
@@ -740,6 +741,9 @@ export class Project extends Scene {
             }),
             pure: new Material(new Color_Phong_Shader(), {
                 color: hex_color("#0000FF"), ambient: 1.0, diffusivity: 1.0,
+            }),
+            pure2: new Material(new Color_Phong_Shader(), {
+                color: hex_color("#0000FF"), ambient: 1, diffusivity: .8,
             }),
             shadow: new Material(new Shadow_Textured_Phong_Shader(1), {
                 color: color(1, 1, 1, 1), ambient: .3, diffusivity: 0.6, specularity: 0.4, smoothness: 64,
@@ -1237,11 +1241,46 @@ export class Project extends Scene {
         })
         console.timeEnd("Draws natures")
 
+    
+        console.time("Draws castle health")
+        if (this.health > 0) {
+            let timeInSeconds = t / 1000;
+            let sineValue = Math.sin((timeInSeconds * Math.PI * 2) / 5);
+            let verticalMovement =  sineValue + 0.5; 
+            let size = 4.5 - (3 * this.health / 100);
+            if (this.health > 75) {
+                // make a green to yellow color gradient
+                let color = hex_color("#00FF00").mix(hex_color("#FFFF00"), (25 - (this.health - 75) ) / 25);
+                // draw the sphere with the color
+                this.shapes.healthBall.draw(context, program_state, Mat4.translation(85.5, 17 + verticalMovement , -90).times(Mat4.scale(size, size, size)), this.materials.pure2.override({color: color}));
+            } 
+            else if (this.health > 50) {
+                // make a yellow to orange color gradient
+                let color = hex_color("#FFFF00").mix(hex_color("#FFA500"), (25 - (this.health - 50) ) / 25);
+                // draw the sphere with the color
+                this.shapes.healthBall.draw(context, program_state, Mat4.translation(85.5, 17 + verticalMovement, -90).times(Mat4.scale(size, size, size)), this.materials.pure2.override({color: color}));
+            }
+            else if (this.health > 10) {
+                // make a orange to orange red color gradient
+                let color = hex_color("#FFA500").mix(hex_color("#FF0000"), (40 - (this.health - 10) ) / 40);
+                // draw the sphere with the color
+                this.shapes.healthBall.draw(context, program_state, Mat4.translation(85.5, 17 + verticalMovement, -90).times(Mat4.scale(size, size, size)), this.materials.pure2.override({color: color}));
+            }
+            else {
+                // make a orange red to  dark red color gradient    
+                let color = hex_color("#FF0000").mix(hex_color("#8B0000"), (10 - this.health) / 10);
+                // draw the sphere with the color
+                this.shapes.healthBall.draw(context, program_state, Mat4.translation(85.5, 17 + verticalMovement, -90).times(Mat4.scale(size, size, size)), this.materials.pure2.override({color: color}));
+            }
+        }
+        console.timeEnd("Draws castle health")
+
+
         drawTerrain(context, program_state, this.shapes.ground, shadow_pass ? this.materials.terrain : this.materials.pure);
         drawSkybox(context, program_state, this.shapes.square, [this.materials.skybox_top, this.materials.skybox_front, this.materials.skybox_left, this.materials.skybox_right, this.materials.skybox_back], shadow_pass );
         drawWall(context, program_state, this.shapes.zoomedSquare, this.materials.wall, shadow_pass);
         
-
+    
         this.drawHUD(context, program_state, shadow_pass)
 
         program_state.camera_inverse = Mat4.inverse(Mat4.translation(...origin).times(camera_matrix));
