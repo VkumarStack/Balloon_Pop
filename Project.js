@@ -714,9 +714,6 @@ class Balloon extends Collidable {
         // Balloons will follow a fixed path, and how exactly it moves on this path will be based on this progress range
         this.progress = 0;
 
-        // Update Cluster - Only used to gather optimal blocking
-        this.clusterNavigate = false
-
         // Update Path
         const stage1 = (stageTime, matrix) =>
             Mat4.translation(stageTime, (stageTime * stageTime * 10) / 25, 0);
@@ -805,12 +802,6 @@ class Balloon extends Collidable {
         projectile.durability -= numPierces;
         this.durability -= numPierces;
     }
-
-    // Set Cluster Navigate
-    setClusterNavigate() {
-        this.clusterNavigate = true
-    }
-
 }
 
 class Nature extends Collidable {
