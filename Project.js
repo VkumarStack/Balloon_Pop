@@ -35,7 +35,7 @@ const TERRAIN_BOUNDS = vec3(100, 0, 100);
 const BALLOON_HEALTH = [hex_color("#ff0000"), hex_color("#ff0000"), hex_color("#0092e3"), hex_color("#63a800"), hex_color("#ffd100"), hex_color("#ff2b51"), hex_color("#141414") ]
 
 const WAVE_INFORMATION = [
-    { balloons: [{1: 10}], balloon_speed: 1, spawn_interval: 3000 }, 
+    { balloons: [{1: 1}], balloon_speed: 3, spawn_interval: 3000 }, 
     { balloons: [{1: 10}, {2: 5}], balloon_speed: 0.6, spawn_interval: 2500 }, 
     { balloons: [{1: 20}, {2: 15}, {3: 5}], balloon_speed: 0.7, spawn_interval: 2000 }, 
     { balloons: [{1: 30}, {2: 25}, {3: 15}, {4: 5}], balloon_speed: 0.8, spawn_interval: 2000}, 
@@ -633,23 +633,19 @@ class BalloonCluster extends Collidable {
   ];
 
   static progressLookup(progress) {
-    if (progress >= 301.75)
-      return this.clusters[10];
-    else if (progress >= 207.5)
-      return this.clusters[9];
-    else if (progress >= 135) return this.clusters[8];
-    else if (progress >= 130) return this.clusters[7];
-    else if (progress >= 85) return this.clusters[6];
-    else if (progress >= 80) return this.clusters[5];
-    else if (progress >= 60) return this.clusters[4];
-    else if (progress >= 41.4) return this.clusters[3];
-    else if (progress >= 10) return this.clusters[2];
-    else if (progress >= 5) return this.clusters[1];
-    else return this.clusters[0];
+    console.log(progress)
+    for (let i = 0; i < this.path.intervals.length; i++) {
+        const interval = this.path.intervals[i];
+        if (progress >= interval.start && progress <= interval.end)
+            return this.clusters[i];
+    }
+
+    // If progress is larger than path.end(), it should have reanched the end
   }
 
-  static setClusters(clusters) {
-    this.clusters = clusters;
+  static setClusters(path) {
+    this.path = path;
+    this.clusters = path.buildCluster();
   }
 
   constructor(matrix, collidables=[]) {
@@ -782,7 +778,7 @@ class Balloon extends Collidable {
         this.path.addInterval(207.5, 301.75, stage10);
         this.path.addInterval(301.75, 306.75, stage11);
 
-        BalloonCluster.setClusters(this.path.buildCluster());
+        BalloonCluster.setClusters(this.path);
     }
 
     draw(context, program_state, dt, collidables, shadow_pass) 
@@ -790,13 +786,19 @@ class Balloon extends Collidable {
         this.progress += dt * this.speed;
 
         // Stages represent its stages of motion - i.e. parabolic, sinusoidal, circular, etc.
-        if (this.progress > this.path.end())
+        console.log(this.path.end())
+        console.log(this.progress + .001)
+        if (this.progress + 0.001 > this.path.end()) {
             this.reachedEnd = true;
-        const matrix = this.path.pick(this.progress);
-        this.updateMatrix(matrix)
+        }
 
-        // Add to Balloon Clusters
-        BalloonCluster.progressLookup(this.progress).addChild(this);
+        if (!this.reachedEnd) {
+          const matrix = this.path.pick(this.progress);
+          this.updateMatrix(matrix);
+
+          // Add to Balloon Clusters
+          BalloonCluster.progressLookup(this.progress).addChild(this);
+        }
         
         this.shape.draw(context, program_state, this.matrix.times(this.size), shadow_pass ? this.material.override(BALLOON_HEALTH[this.durability]) : this.shadow)
     }
