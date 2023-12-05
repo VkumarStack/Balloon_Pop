@@ -730,6 +730,7 @@ export class Project extends Scene {
             powerup_throw: new Text_Line(50),
             throw_price: new Text_Line(50),
             powerup_multishot: new Text_Line(50),
+            game_complete: new Text_Line(50),
         }
         this.wallDimensions = [10, 10, 10];
 
@@ -899,11 +900,14 @@ export class Project extends Scene {
 
         this.spawnBalloons = function() {
             if (this.currentWave >= WAVE_INFORMATION.length)
+            {
+                this.game_won = true;
                 return; 
+            }
             // Get new wave
             if (this.currentBalloons === null)
             {
-                this.currentBalloons = [...WAVE_INFORMATION[this.currentWave].balloons]
+                this.currentBalloons = JSON.parse(JSON.stringify(WAVE_INFORMATION[this.currentWave].balloons))
             }
             if (this.currentBalloons.length != 0) {
                 // Sample random index balloon to spawn
@@ -918,6 +922,7 @@ export class Project extends Scene {
             }
             else if (this.balloons.length == 0) // Do not start new wave until all current balloons are despawned
             {
+                console.log("WAVE INFORMATION" + JSON.stringify(WAVE_INFORMATION))
                 this.currentBalloons = null;
                 this.currentWave += 1
                 setTimeout(this.spawnBalloons.bind(this), 5000)
@@ -951,6 +956,9 @@ export class Project extends Scene {
 
         this.init_ok = false;
         this.motion_controls = false;
+
+        this.game_over = false;
+        this.game_won = false;
     }
 
     fireprojectile() {
@@ -1028,8 +1036,24 @@ export class Project extends Scene {
             this.shapes.powerup_throw.set_string("Throw Tier:" + String(this.shootCooldownTier + 1), context.context)
             this.shapes.powerup_multishot.set_string("Multishot:" + (this.ownsMultishot ? (this.multishot ? "On" : "Off") : "$500"), context.context)
             const mat = Mat4.translation(...origin).times(camera_matrix).times(Mat4.scale(0.01, 0.01, 0.01))
-            
-            let lookDirection = camera_matrix.times(vec4(0.25, 0.23, -0.6, 0))
+            let lookDirection;
+
+            if (this.game_over)
+            {
+                this.shapes.game_complete.set_string("The balloons took over. You lost.", context.context)
+                lookDirection = camera_matrix.times(vec4(-0.22, 0.01, -0.6, 0))
+                this.shapes.game_complete.draw(context, program_state, Mat4.translation(...lookDirection).times(mat), this.materials.text)
+                return;
+            }
+            else if (this.game_won)
+            {
+                this.shapes.game_complete.set_string("You have defeated all balloons. You won.", context.context)
+                lookDirection = camera_matrix.times(vec4(-0.28, 0.01, -0.6, 0))
+                this.shapes.game_complete.draw(context, program_state, Mat4.translation(...lookDirection).times(mat), this.materials.text)
+                return;
+            }
+
+            lookDirection = camera_matrix.times(vec4(0.25, 0.23, -0.6, 0))
             this.shapes.money.draw(context, program_state, Mat4.translation(...lookDirection).times(mat), this.materials.text )
 
             lookDirection = camera_matrix.times(vec4(0.25, 0.2, -0.6, 0))
@@ -1151,6 +1175,12 @@ export class Project extends Scene {
 
     render_scene(context, program_state, shadow_pass, draw_light_source=false, draw_shadow=false)
     {
+        if (this.game_over || this.game_won) {
+            this.drawHUD(context, program_state, shadow_pass)
+            program_state.camera_inverse = Mat4.inverse(Mat4.translation(...origin).times(camera_matrix));
+            return;
+        }
+
         // shadow_pass: true if this is the second pass that draw the shadow.
         // draw_light_source: true if we want to draw the light source.
         // draw_shadow: true if we want to draw the shadow
@@ -1192,7 +1222,11 @@ export class Project extends Scene {
             {
                 console.time("Balloons Array Splicing")
                 if (this.balloons[i].reachedEnd)
+                {
                     this.health = Math.max(this.health - (this.balloons[i].durability - this.balloons[i].collidedObjects.size), 0)
+                    if (this.health == 0)
+                        this.game_over = true;
+                }
                 else
                     this.money += this.balloons[i].originalHealth;
                 this.balloons.splice(i, 1);
