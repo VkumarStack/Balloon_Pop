@@ -35,7 +35,7 @@ const TERRAIN_BOUNDS = vec3(100, 0, 100);
 const BALLOON_HEALTH = [hex_color("#ff0000"), hex_color("#ff0000"), hex_color("#0092e3"), hex_color("#63a800"), hex_color("#ffd100"), hex_color("#ff2b51"), hex_color("#141414") ]
 
 const WAVE_INFORMATION = [
-    { balloons: [{1: 10}], balloon_speed: 0.5, spawn_interval: 3000 }, 
+    { balloons: [{1: 1}], balloon_speed: 0.5, spawn_interval: 3000 }, 
     { balloons: [{1: 10}, {2: 5}], balloon_speed: 0.6, spawn_interval: 2500 }, 
     { balloons: [{1: 20}, {2: 15}, {3: 5}], balloon_speed: 0.7, spawn_interval: 2000 }, 
     { balloons: [{1: 30}, {2: 25}, {3: 15}, {4: 5}], balloon_speed: 0.8, spawn_interval: 2000}, 
@@ -348,21 +348,28 @@ class Path {
         this.intervals = []
     }
 
-    // formula returns [x, y, z]
+    // formula returns Mat4.transformation
     addInterval(start, end, formula) {
         this.intervals.push(new Interval(start, end, formula));
     }
 
     // For now the method assumes intervals are consecutive and sorted
     pick(progress) {
+        let matrix = Mat4.identity();
         for (let i = 0; i < this.intervals.length; i++) {
+            matrix = this.intervals[i].pick(progress, matrix).times(matrix);
+            console.log(i, matrix);
             if (progress <= this.intervals[i].end)
-                return this.intervals[i].pick(progress);
+                return matrix;
         }
     }
 
+    end() {
+        return this.intervals[this.intervals.length - 1].end;
+    }
+
     // Higher dp guarantees higher precision
-    buildCluster(dp = .5) {
+    buildCluster(initial_matrix, dp = .5) {
         if (this.intervals.length == 0)
             return null;
         
@@ -377,14 +384,15 @@ class Path {
             max_z = Number.NEGATIVE_INFINITY;
 
         while (dp <= this.intervals[this.intervals.length - 1].end) {
-            dp = this.pick(progress);
+            const matrix  
+                = initial_matrix.times(this.pick(progress));
 
-            min_x = Math.min(min_x, dp[0]);
-            min_y = Math.min(min_y, dp[1]);
-            min_z = Math.min(min_z, dp[2]);
-            max_x = Math.max(max_x, dp[0]);
-            max_y = Math.max(max_y, dp[1]);
-            max_z = Math.max(max_z, dp[2]);
+            min_x = Math.min(min_x, matrix[0][3]);
+            min_y = Math.min(min_y, matrix[1][3]);
+            min_z = Math.min(min_z, matrix[2][3]);
+            max_x = Math.max(max_x, matrix[0][3]);
+            max_y = Math.max(max_y, matrix[1][3]);
+            max_z = Math.max(max_z, matrix[2][3]);
 
             progress += dp;
             if (progress > this.intervals[intervalID]) {
@@ -414,13 +422,13 @@ class Interval {
         this.formula = formula;
     }
 
-    pick(progress) {
-        if (progress < this.start || progress > this.end)
-            console.error()
+    pick(progress, matrix) {
+        if (progress < this.start)
+            console.error("Incorrect progress: %.3f, %.3f-%.3f", progress, this.start, this.end);
         else {
             const stageTime = 
                 Math.min(this.end - this.start, progress - this.start);
-            const compute = this.formula(stageTime);
+            const compute = this.formula(stageTime, matrix);
             return compute;
         }
     }
@@ -571,7 +579,7 @@ class Balloon extends Collidable {
         super(Mat4.identity(), size);
         this.originalHealth = durability;
         this.durability = durability;
-        this.speed = speed;
+        this.speed = 1;
         this.pierceable = true;
         this.reachedEnd = false;
         this.initial_pos = initial_pos;
@@ -585,6 +593,66 @@ class Balloon extends Collidable {
 
         // Update Cluster - Only used to gather optimal blocking
         this.clusterNavigate = false
+
+        // Update Path
+        const stage1 = (stageTime, matrix) =>
+            Mat4.translation(stageTime, (stageTime * stageTime * 10) / 25, 0);
+        const stage2 = (stageTime, matrix) => 
+            Mat4.translation(2.5 * stageTime, 0, 0);
+        const stage3 = (stageTime, matrix) =>
+          Mat4.translation(2.5 * stageTime, 0, 2.5 * Math.sin(stageTime));
+        const stage4 = (stageTime, matrix) => {
+            let n_stageTime = stageTime * (Math.PI * 3 / 2 / (60 - 41.4));
+            return Mat4.translation(matrix[0][3] + 25, matrix[1][3], matrix[2][3]).times(Mat4.rotation(-n_stageTime, 0, 1, 0))
+              .times(
+                Mat4.translation(
+                  -(matrix[0][3] + 25),
+                  -matrix[1][3],
+                  -matrix[2][3]
+                )
+              );
+        }
+        const stage5 = (stageTime, matrix) => {
+            let n_stageTime = stageTime * (Math.PI / (80 - 60));
+            return Mat4.translation(matrix[0][3], matrix[1][3], matrix[2][3] + 25)
+              .times(Mat4.rotation(n_stageTime, 0, 1, 0))
+              .times(
+                Mat4.translation(
+                  -matrix[0][3],
+                  -matrix[1][3],
+                  -(matrix[2][3] + 25)
+                )
+              );
+        }
+        const stage6 = (stageTime, matrix) =>
+          Mat4.translation(0, 0, stageTime * 2);
+        const stage7 = (stageTime, matrix) =>
+          Mat4.translation(-stageTime * 2, 0, Math.sin(stageTime));
+        const stage8 = (stageTime, matrix) =>
+          Mat4.translation(0, 0, stageTime * 2);
+        const stage9 = (stageTime, matrix) =>
+          Mat4.translation(stageTime * 2, 0, Math.sin(stageTime));
+        const stage10 = (stageTime, matrix) =>
+          Mat4.translation(0, 2 * Math.sin(stageTime), -2 * stageTime);
+        const stage11 = (stageTime, matrix) =>
+          Mat4.translation(
+            stageTime,
+            (-stageTime * stageTime * 10) / 25,
+            0
+          );
+
+        this.path = new Path();
+        this.path.addInterval(0, 5, stage1);
+        this.path.addInterval(5, 10, stage2);
+        this.path.addInterval(10, 41.4, stage3);
+        this.path.addInterval(41.4, 60, stage4);
+        this.path.addInterval(60, 80, stage5);
+        this.path.addInterval(80, 85, stage6);
+        this.path.addInterval(85, 130, stage7);
+        this.path.addInterval(130, 135, stage8);
+        this.path.addInterval(135, 207.5, stage9);
+        this.path.addInterval(207.5, 301.75, stage10);
+        this.path.addInterval(301.75, 306.75, stage11);
     }
 
     draw(context, program_state, dt, collidables, shadow_pass) 
@@ -592,60 +660,10 @@ class Balloon extends Collidable {
         this.progress += dt * this.speed;
 
         // Stages represent its stages of motion - i.e. parabolic, sinusoidal, circular, etc.
-        const stage1Time = Math.min(5, this.progress) // 0 <= t <= 5
-        let matrix = Mat4.translation(stage1Time, stage1Time * stage1Time * 10 / 25, 0).times(this.initial_pos)
-        if (this.progress >= 5) // 5 <= t <= 10
-        {
-            const stage2Time = Math.min(10 - 5, this.progress - 5)
-            matrix = Mat4.translation(2.5 * stage2Time, 0, 0).times(matrix)
-        }
-        if (this.progress >= 10) // 10 <= t <= 41.4
-        {
-            const stage3Time = Math.min(41.4 - 10, this.progress - 10)
-            matrix = Mat4.translation(2.5 * stage3Time, 0, 2.5 * Math.sin(stage3Time)).times(matrix)
-        }
-        if (this.progress >= 41.4) // 41. 4 <= t <= 60
-        {
-            const stage4Time = Math.min(60 - 41.4, this.progress - 41.4) * (Math.PI * 3 / 2 / (60 - 41.4))
-            matrix = Mat4.translation(matrix[0][3] + 25, matrix[1][3], matrix[2][3]).times(Mat4.rotation(-stage4Time, 0, 1, 0)).times(Mat4.translation(-(matrix[0][3] + 25), -matrix[1][3], -matrix[2][3])).times(matrix)
-        }
-        if (this.progress >= 60) // 60 <= t <= 80
-        {
-            const stage5Time = Math.min(80 - 60, this.progress - 60) * (Math.PI / (80 - 60))
-            matrix = Mat4.translation(matrix[0][3], matrix[1][3], matrix[2][3] + 25).times(Mat4.rotation(stage5Time, 0, 1, 0)).times(Mat4.translation(-matrix[0][3], -matrix[1][3], -(matrix[2][3] + 25))).times(matrix)
-        }
-        if (this.progress >= 80) // 80 <= t <= 85
-        {
-            const stage6Time = Math.min(85 - 80, this.progress - 80)
-            matrix = Mat4.translation(0, 0, stage6Time * 2).times(matrix)
-        }
-        if (this.progress >= 85) // 85 <= t <= 130
-        {
-            const stage7Time = Math.min(130 - 85, this.progress - 85)
-            matrix = Mat4.translation(-stage7Time * 2, 0, Math.sin(stage7Time)).times(matrix)
-        }
-        if (this.progress >= 130) // 130 <= t <= 135
-        {
-            const stage8Time = Math.min(135 - 130, this.progress - 130)
-            matrix = Mat4.translation(0, 0, stage8Time * 2).times(matrix)
-        }
-        if (this.progress >= 135) // 135 <= t <= 207.5
-        {
-            const stage9Time = Math.min(207.5 - 135, this.progress - 135)
-            matrix = Mat4.translation(stage9Time * 2, 0, Math.sin(stage9Time)).times(matrix)
-        }
-        if (this.progress >= 207.5) // 207.5 <= t <= 301.75
-        {
-            const stage10Time = Math.min(301.75 - 207.5, this.progress - 207.5)
-            matrix = Mat4.translation(0, 2 * Math.sin(stage10Time), -2 * stage10Time).times(matrix)
-        }
-        if (this.progress >= 301.75) // 301.75 <= t <= 306.75
-        {
-            const stage11Time = Math.min(306.75 - 301.75, this.progress - 301.75)
-            matrix = Mat4.translation(stage11Time, -stage11Time * stage11Time * 10 / 25, 0).times(matrix)
-        }
-        if (this.progress >= 306.75)
+        if (this.progress > this.path.end())
             this.reachedEnd = true;
+        const matrix = this.path.pick(this.progress)
+            .times(this.initial_pos);
 
         this.updateMatrix(matrix)
 
