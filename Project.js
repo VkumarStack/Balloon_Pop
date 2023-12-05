@@ -725,6 +725,8 @@ export class Project extends Scene {
             birch: new Shape_From_File("assets/BirchTree_2.obj"),
             rock: new Shape_From_File("assets/Rock_3.obj"),
             log: new Shape_From_File("assets/WoodLog.obj"),
+            flower: new Shape_From_File("assets/Flowers.obj"),
+            bush: new Shape_From_File("assets/Bush_2.obj"),
             castle: new Shape_From_File("assets/Castle_Tower.obj"),
             health: new Text_Line(12),
             money: new Text_Line(15),
@@ -840,6 +842,13 @@ export class Project extends Scene {
             log: new Material(new Phong_Shader(), {
                 color: hex_color("#635946")
             }),
+            flower: new Material(new Phong_Shader(), {
+                color: hex_color("#faff5e"),
+                //leaf: hex_color("#ce2c75")
+            }),
+            bush: new Material(new Phong_Shader(), {
+                color: hex_color("#2db028")
+            }),
             castle: new Material(new Phong_Shader(), {
                 color: hex_color("#8C8C8C"),
                 ambient: 0.2,
@@ -887,8 +896,26 @@ export class Project extends Scene {
             new Nature(Mat4.translation(45, 13, -65).times(Mat4.scale(5, 5, 5)).times(Mat4.rotation(Math.PI / 2, 0, 1, 0)), Mat4.scale(1.05, 6, 1), this.shapes.tree4, this.materials.tree4, this.materials.shadow, Mat4.translation(-1.65, 1.3, 1.6)),
             new Nature(Mat4.translation(30, 13, -45).times(Mat4.scale(5, 5, 5)).times(Mat4.rotation(Math.PI / 2, 0, 1, 0)), Mat4.scale(1, 7, 1.2), this.shapes.tree5, this.materials.tree5, this.materials.shadow, Mat4.translation(3, 1, 0.9)),
             new Nature(Mat4.translation(-85, 5, -85).times(Mat4.scale(10, 10, 10)).times(Mat4.rotation(Math.PI / 4, 0, 1, 0)), Mat4.scale(13, 7, 12.5), this.shapes.rock, this.materials.rock, this.materials.shadow, Mat4.translation(0.1, -0.2, -0.05,)),
-            new Nature(Mat4.translation(-50, 1, -50).times(Mat4.scale(8, 16, 12)).times(Mat4.rotation(Math.PI / 2, 0, 1, 0)), Mat4.scale(7., 7.8, 9.5), this.shapes.rock, this.materials.rock2, this.materials.shadow, Mat4.translation(-0.1, -0.8, -0.2,)), 
+            new Nature(Mat4.translation(-50, 1, -50).times(Mat4.scale(8, 16, 12)).times(Mat4.rotation(Math.PI / 2, 0, 1, 0)), Mat4.scale(7., 7.8, 9.5), this.shapes.rock, this.materials.rock2, this.materials.shadow, Mat4.translation(-0.1, -0.8, -0.2,)),
             new Nature(Mat4.translation(-50, 18, -50).times(Mat4.scale(8, 4, 10)).times(Mat4.rotation(Math.PI / 2, 0, 1, 0)), Mat4.scale(8, 2, 9), this.shapes.rock, this.materials.rock2, this.materials.shadow, Mat4.translation(-0.2, 0, -0.2)),
+
+            //New Trees
+            new Nature(Mat4.translation(10, 10, 50).times(Mat4.scale(5, 5, 5)).times(Mat4.rotation(Math.PI / 2, 0, 1, 0)), Mat4.scale(1, 7, 1.2), this.shapes.tree5, this.materials.tree5, this.materials.shadow, Mat4.translation(3, 1, 0.9)),
+            new Nature(Mat4.translation(-10, 10, 30).times(Mat4.scale(5, 5, 5)).times(Mat4.rotation(Math.PI / 2, 0, 1, 0)), Mat4.scale(1, 7, 1.2), this.shapes.tree3, this.materials.tree3, this.materials.shadow, Mat4.translation(0, 1.5, 1,)),
+            new Nature(Mat4.translation(-15, 10, 60).times(Mat4.scale(5, 5, 5)).times(Mat4.rotation(Math.PI / 2, 0, 1, 0)), Mat4.scale(1, 7, 1.2), this.shapes.tree2, this.materials.tree2, this.materials.shadow, Mat4.translation(3, 1, 0.9)),
+            new Nature(Mat4.translation(65, 10, 10).times(Mat4.scale(5, 5, 5)).times(Mat4.rotation(Math.PI / 2, 0, 1, 0)), Mat4.scale(1, 7, 1.2), this.shapes.tree2, this.materials.tree2, this.materials.shadow, Mat4.translation(3, 1, 0.9)),
+            new Nature(Mat4.translation(50, 8, 40).times(Mat4.scale(5, 5, 5)).times(Mat4.rotation(Math.PI / 2, 0, 1, 0)), Mat4.scale(1, 7, 1.2), this.shapes.willow, this.materials.willow, this.materials.shadow, Mat4.translation(1.5, 0.9, 0.8)),
+            new Nature(Mat4.translation(-85, 8, 35).times(Mat4.scale(5, 5, 5)).times(Mat4.rotation(Math.PI / 2, 0, 1, 0)), Mat4.scale(1, 7, 1.2), this.shapes.willow, this.materials.willow, this.materials.shadow, Mat4.translation(1.5, 0.9, 0.8)),
+            new Nature(Mat4.translation(-70, 10, 10).times(Mat4.scale(5, 5, 5)).times(Mat4.rotation(Math.PI / 2, 0, 1, 0)), Mat4.scale(1, 7, 1.2), this.shapes.tree3, this.materials.tree3, this.materials.shadow, Mat4.translation(0, 1.5, 1,)),
+            new Nature(Mat4.translation(-60, 14, 40).times(Mat4.scale(6.5, 7, 5)).times(Mat4.rotation(Math.PI / 2, 0, 1, 0)), Mat4.scale(1, 3.8, 1), this.shapes.tree, this.materials.tree, this.materials.shadow, Mat4.translation(1.5, 2.95, 0)),
+            new Nature(Mat4.translation(40, 10, 60).times(Mat4.scale(5, 5, 5)).times(Mat4.rotation(Math.PI / 4, 0, 1, 0)), Mat4.scale(1, 5.5, 1), this.shapes.birch, this.materials.birch, this.materials.shadow, Mat4.translation(1.7, 1, 2)),
+            new Nature(Mat4.translation(-40, 14, -20).times(Mat4.scale(6.5, 7, 5)).times(Mat4.rotation(Math.PI / 2, 0, 1, 0)), Mat4.scale(1, 3.8, 1), this.shapes.tree, this.materials.tree, this.materials.shadow, Mat4.translation(1.5, 2.95, 0)),
+            new Nature(Mat4.translation(55, 13, -25).times(Mat4.scale(5, 5, 5)).times(Mat4.rotation(Math.PI / 2, 0, 1, 0)), Mat4.scale(1, 5.5, 1), this.shapes.tree3, this.materials.tree3, this.materials.shadow, Mat4.translation(0, 1.5, 1,)),
+
+            new Nature(Mat4.translation(-25, 0, 50).times(Mat4.scale(1, 2, 2)).times(Mat4.rotation(Math.PI / 2, 0, 1, 0)), Mat4.scale(1., 1.5, 2), this.shapes.rock, this.materials.rock2, this.materials.shadow, Mat4.translation(-0.1, -0.8, -0.2,)),
+            new Nature(Mat4.translation(5, 0, 45).times(Mat4.scale(0.5, 0.5, 0.5)), Mat4.scale(0.4, 0.5, 0.5), this.shapes.flower, this.materials.flower, this.materials.shadow, Mat4.translation(0, -0.1, -0.4)),
+
+
             new Nature(Mat4.translation(0, -0.1, 50), Mat4.scale(0.5, 0.6, 2), this.shapes.log, this.materials.log, this.materials.shadow, Mat4.translation(0, -0.1, -0.4)),
             new Nature(Mat4.translation(85, 5, -90).times(Mat4.rotation(-Math.PI / 2, 1, 0 , 0)).times(Mat4.rotation(Math.PI / 2, 0, 0, 1)).times(Mat4.scale(5, 5, 5,)), Mat4.scale(5.5, 6, 5.5,), this.shapes.castle, this.materials.castle, this.materials.shadow, Mat4.translation(0, 0, 0)),
             // Walls
@@ -899,7 +926,47 @@ export class Project extends Scene {
 
 
         ];
+        //randomly generate flowers
+        let flowerInstances = [];
+        for (let i = -200; i < 200; i = i + 60) {
+            for (let j = -200; j < 200; j = j + 60) {
+                flowerInstances.push(
+                    new Nature(
+                        Mat4.translation(Math.floor(Math.random() * i), 0, Math.floor(Math.random() * j)).times(Mat4.scale(0.5, 0.5, 0.5)),
+                        Mat4.scale(0.4, 0.5, 0.5),
+                        this.shapes.flower,
+                        this.materials.flower,
+                        this.materials.shadow,
+                        Mat4.translation(0, -0.1, -0.4)
+                    )
+                );
+            }
+        }
+        //randomly generate logs
+        let logInstances = [];
+        for (let i = -200; i < 200; i = i + 85) {
+            for (let j = -200; j < 200; j = j + 85) {
+                //let a = Math.PI / Math.random() * 2 // made for maintaining random rotation of log for hitbox
+                logInstances.push(
+                    // new Nature(Mat4.translation(Math.floor(Math.random() * i), -0.1, Math.floor(Math.random() * j)).times(Mat4.rotation(a, 0, 1, 0)), Mat4.scale(0.5, 0.6, 2), this.shapes.log, this.materials.log, this.materials.shadow, Mat4.translation(0, -0.1, -0.4).times(Mat4.rotation(a, 0, 1, 0)))
+                    new Nature(Mat4.translation(Math.floor(Math.random() * i), -0.1, Math.floor(Math.random() * j)), Mat4.scale(0.5, 0.6, 2), this.shapes.log, this.materials.log, this.materials.shadow, Mat4.translation(0, -0.1, -0.4))
 
+                );
+            }
+        }
+        //randomly generate bushes
+        let bushInstances = [];
+        for (let i = -200; i < 200; i = i + 85) {
+            for (let j = -200; j < 200; j = j + 85) {
+                //let a = Math.PI / Math.random() * 2 // made for maintaining random rotation of log for hitbox
+                logInstances.push(
+                    // new Nature(Mat4.translation(Math.floor(Math.random() * i), -0.1, Math.floor(Math.random() * j)).times(Mat4.rotation(a, 0, 1, 0)), Mat4.scale(0.5, 0.6, 2), this.shapes.log, this.materials.log, this.materials.shadow, Mat4.translation(0, -0.1, -0.4).times(Mat4.rotation(a, 0, 1, 0)))
+                    new Nature(Mat4.translation(Math.floor(Math.random() * i), -0.1, Math.floor(Math.random() * j)), Mat4.scale(0.9, 0.9, 0.9), this.shapes.bush, this.materials.bush, this.materials.shadow, Mat4.translation(0, -0.1, -0.4))
+
+                );
+            }
+        }
+        this.nature = this.nature.concat(flowerInstances, logInstances, bushInstances);
 
         player = new Player(Mat4.translation(...INITIAL_POSITION), this.nature)
 
@@ -1489,6 +1556,8 @@ class Tree_Shader extends Shader {
         // graphics card, where they will tweak the Phong lighting formula.
         gl.uniform4fv(gpu.shape_color, material.leaf);
         gl.uniform4fv(gpu.shape2_color, material.stump);
+        //gl.uniform4fv(gpu.shape2_color, material.stem);
+        // gl.uniform4fv(gpu.shape2_color, material.petal);
         gl.uniform1f(gpu.ambient, material.ambient);
         gl.uniform1f(gpu.diffusivity, material.diffusivity);
         gl.uniform1f(gpu.specularity, material.specularity);
