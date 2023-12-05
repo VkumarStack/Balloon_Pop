@@ -344,8 +344,9 @@ class Movement extends defs.Movement_Controls {
 // Dedicated class to describe movements of objects on scenes
 // Remark: for now this is a rough prototype with NO ERROR HANDLING and optimization.
 class Path {
-    constructor() {
-        this.intervals = []
+    constructor(initial_pos) {
+        this.intervals = [];
+        this.initial_pos = initial_pos;
     }
 
     // formula returns Mat4.transformation
@@ -355,13 +356,16 @@ class Path {
 
     // For now the method assumes intervals are consecutive and sorted
     pick(progress) {
-        let matrix = Mat4.identity();
+        let matrix = this.initial_pos;
         for (let i = 0; i < this.intervals.length; i++) {
             matrix = this.intervals[i].pick(progress, matrix).times(matrix);
-            console.log(i, matrix);
             if (progress <= this.intervals[i].end)
                 return matrix;
         }
+    }
+
+    start() {
+        return this.intervals[0].start;
     }
 
     end() {
@@ -369,11 +373,11 @@ class Path {
     }
 
     // Higher dp guarantees higher precision
-    buildCluster(initial_matrix, dp = .5) {
+    buildCluster(dp = .05, error = 0.0001) {
         if (this.intervals.length == 0)
             return null;
         
-        let progress = this.intervals[0].start;
+        let progress = this.start();
         let intervalID = 0;
         let clusters = [];
         let min_x = Number.POSITIVE_INFINITY, 
@@ -383,22 +387,27 @@ class Path {
             min_z = Number.POSITIVE_INFINITY, 
             max_z = Number.NEGATIVE_INFINITY;
 
-        while (dp <= this.intervals[this.intervals.length - 1].end) {
-            const matrix  
-                = initial_matrix.times(this.pick(progress));
+        let matrix = this.initial_pos;
+        while (progress + error <= this.end()) {
+            const temp_tran = this.intervals[intervalID].pick(progress + error, matrix);
+            const temp_matrix = temp_tran.times(matrix);
 
-            min_x = Math.min(min_x, matrix[0][3]);
-            min_y = Math.min(min_y, matrix[1][3]);
-            min_z = Math.min(min_z, matrix[2][3]);
-            max_x = Math.max(max_x, matrix[0][3]);
-            max_y = Math.max(max_y, matrix[1][3]);
-            max_z = Math.max(max_z, matrix[2][3]);
+            min_x = Math.min(min_x, temp_matrix[0][3]);
+            min_y = Math.min(min_y, temp_matrix[1][3]);
+            min_z = Math.min(min_z, temp_matrix[2][3]);
+            max_x = Math.max(max_x, temp_matrix[0][3]);
+            max_y = Math.max(max_y, temp_matrix[1][3]);
+            max_z = Math.max(max_z, temp_matrix[2][3]);
 
             progress += dp;
-            if (progress > this.intervals[intervalID]) {
+            if (progress + error > this.intervals[intervalID].end) {
+                console.log("Phase %d ends", intervalID);
+                console.log(min_x, max_x, min_y, max_y, min_z, max_z);
                 intervalID += 1;
+                matrix = temp_tran.times(matrix);   // Cache the matrix
+
                 clusters.push(new BalloonCluster([
-                    min_x, max_x, min_y, max_y, min_z, max_z
+                    min_x - .7, max_x + .7, min_y - .7, max_y + .7, min_z - .7, max_z + .7
                 ]));
                 
                 min_x = Number.POSITIVE_INFINITY;
@@ -641,7 +650,7 @@ class Balloon extends Collidable {
             0
           );
 
-        this.path = new Path();
+        this.path = new Path(this.initial_pos);
         this.path.addInterval(0, 5, stage1);
         this.path.addInterval(5, 10, stage2);
         this.path.addInterval(10, 41.4, stage3);
@@ -653,6 +662,8 @@ class Balloon extends Collidable {
         this.path.addInterval(135, 207.5, stage9);
         this.path.addInterval(207.5, 301.75, stage10);
         this.path.addInterval(301.75, 306.75, stage11);
+
+        BalloonCluster.setClusters(this.path.buildCluster());
     }
 
     draw(context, program_state, dt, collidables, shadow_pass) 
@@ -662,9 +673,7 @@ class Balloon extends Collidable {
         // Stages represent its stages of motion - i.e. parabolic, sinusoidal, circular, etc.
         if (this.progress > this.path.end())
             this.reachedEnd = true;
-        const matrix = this.path.pick(this.progress)
-            .times(this.initial_pos);
-
+        const matrix = this.path.pick(this.progress);
         this.updateMatrix(matrix)
 
         // Add to Balloon Clusters
@@ -752,6 +761,10 @@ class BalloonCluster extends Collidable {
     else if (progress >= 10) return this.clusters[2];
     else if (progress >= 5) return this.clusters[1];
     else return this.clusters[0];
+  }
+
+  static setClusters(clusters) {
+    this.clusters = clusters;
   }
 
   constructor(matrix, collidables=[]) {
