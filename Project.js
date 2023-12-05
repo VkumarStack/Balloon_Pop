@@ -35,7 +35,7 @@ const TERRAIN_BOUNDS = vec3(100, 0, 100);
 const BALLOON_HEALTH = [hex_color("#ff0000"), hex_color("#ff0000"), hex_color("#0092e3"), hex_color("#63a800"), hex_color("#ffd100"), hex_color("#ff2b51"), hex_color("#141414") ]
 
 const WAVE_INFORMATION = [
-    { balloons: [{1: 1}], balloon_speed: 3, spawn_interval: 3000 }, 
+    { balloons: [{1: 10}], balloon_speed: 0.5, spawn_interval: 3000 }, 
     { balloons: [{1: 10}, {2: 5}], balloon_speed: 0.6, spawn_interval: 2500 }, 
     { balloons: [{1: 20}, {2: 15}, {3: 5}], balloon_speed: 0.7, spawn_interval: 2000 }, 
     { balloons: [{1: 30}, {2: 25}, {3: 15}, {4: 5}], balloon_speed: 0.8, spawn_interval: 2000}, 
@@ -633,7 +633,6 @@ class BalloonCluster extends Collidable {
   ];
 
   static progressLookup(progress) {
-    console.log(progress)
     for (let i = 0; i < this.path.intervals.length; i++) {
         const interval = this.path.intervals[i];
         if (progress >= interval.start && progress <= interval.end)
@@ -786,8 +785,6 @@ class Balloon extends Collidable {
         this.progress += dt * this.speed;
 
         // Stages represent its stages of motion - i.e. parabolic, sinusoidal, circular, etc.
-        console.log(this.path.end())
-        console.log(this.progress + .001)
         if (this.progress + 0.001 > this.path.end()) {
             this.reachedEnd = true;
         }
