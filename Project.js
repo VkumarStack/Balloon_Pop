@@ -156,6 +156,20 @@ function isFiring(landmarks) {
     return distance * 100 <= 1
 }
 
+
+function isFist(landmarks) {
+    let thumbTip = landmarks[0][4]
+    let indexDIP = landmarks[0][7]
+    let distance = 0
+    Object.keys(thumbTip).forEach((key) => {
+        distance += (indexDIP[key] - thumbTip[key])**2
+    })
+
+    console.log("DISTANCE " + distance * 100)
+    return distance * 100 <= .8
+}
+
+
 function isFiringAlternate(landmarks) {
     let middleFingerTip = landmarks[0][12]
     let middleFingerMCP = landmarks[0][9]
@@ -206,6 +220,9 @@ async function predictWebcam(shootFunction) {
 
     }
     else {
+        if (isFist(results.landmarks)){
+            yaw = 0;
+        }
         dx = 0;
         dy = 0;
     }
