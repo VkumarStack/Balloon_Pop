@@ -659,17 +659,13 @@ function drawSkybox(context, program_state, shape, materials, shadow_pass) {
 }
 
 
-function drawWall(context, program_state, shape, wallMaterial, shadow_pass) {
+function drawWall(context, program_state, shape,wallMaterial) {
   
     console.time("Draws Walls")
-    if (shadow_pass)
-    {
-        shape.draw(context, program_state, Mat4.translation(0, -0.2, -100).times(Mat4.scale(100, 10, 1)), wallMaterial); // Front wall
-        shape.draw(context, program_state, Mat4.translation(0, -0.2, 100).times(Mat4.scale(100, 10, 1)), wallMaterial); // Back wall
-        shape.draw(context, program_state, Mat4.translation(-100, -0.2, 0).times(Mat4.scale(1, 10, 100)), wallMaterial); // left wall
-        shape.draw(context, program_state, Mat4.translation(100, -0.2, 0).times(Mat4.scale(1, 10, 100)), wallMaterial); // right wall
-    
-    }
+    shape.draw(context, program_state, Mat4.translation(0, -0.2, -100).times(Mat4.scale(100, 10, 1)), wallMaterial); // Front wall
+    shape.draw(context, program_state, Mat4.translation(0, -0.2, 100).times(Mat4.scale(100, 10, 1)), wallMaterial); // Back wall
+    shape.draw(context, program_state, Mat4.translation(-100, -0.2, 0).times(Mat4.scale(1, 10, 100)), wallMaterial); // left wall
+    shape.draw(context, program_state, Mat4.translation(100, -0.2, 0).times(Mat4.scale(1, 10, 100)), wallMaterial); // right wall
     console.timeEnd("Draws Walls")
 }
 
@@ -867,8 +863,8 @@ export class Project extends Scene {
             */
 
             wall: new Material(new Shadow_Textured_Phong_Shader(1), {
-                // color: hex_color("#53350A"), 
-                ambient: .8, diffusivity: 0.4, specularity: 0.4,
+                color: hex_color("#8a867b"), 
+                ambient: 0.2, diffusivity: 0.5, specularity: 0.2,
                 color_texture: new Texture("assets/wall2.png", "NEAREST"),
                 light_depth_texture: 1
             })
@@ -1295,7 +1291,7 @@ export class Project extends Scene {
 
         drawTerrain(context, program_state, this.shapes.ground, shadow_pass ? this.materials.terrain : this.materials.pure);
         drawSkybox(context, program_state, this.shapes.square, [this.materials.skybox_top, this.materials.skybox_front, this.materials.skybox_left, this.materials.skybox_right, this.materials.skybox_back], shadow_pass );
-        drawWall(context, program_state, this.shapes.zoomedSquare, this.materials.wall, shadow_pass);
+        drawWall(context, program_state, this.shapes.zoomedSquare, shadow_pass ? this.materials.wall : this.materials.pure);
         
     
         this.drawHUD(context, program_state, shadow_pass)
@@ -1379,16 +1375,6 @@ export class Project extends Scene {
         this.render_scene(context, program_state, true, true, true);
 
         console.timeEnd("Step 2")
-
-        /*
-        // Step 3: display the textures
-        this.shapes.ground.draw(context, program_state,
-            Mat4.translation(-.99, .08, 0).times(
-            Mat4.scale(0.5, 0.5 * gl.canvas.width / gl.canvas.height, 1)
-            ),
-            this.depth_tex.override({texture: this.lightDepthTexture})
-        );
-        */
     }
 }
 
