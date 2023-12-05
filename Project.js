@@ -631,6 +631,7 @@ function drawSkybox(context, program_state, shape, materials, shadow_pass) {
     console.time("Draws skybox")
     if (shadow_pass)
     {
+
         shape.draw(context, program_state, Mat4.translation(0, 100, 0).times(Mat4.scale(100, 1, 100)).times(Mat4.rotation(Math.PI / 2, 1, 0 ,0)), materials[0])
         shape.draw(context, program_state, Mat4.translation(0, 0, -100).times(Mat4.scale(100, 100, 1)), materials[1])
         shape.draw(context, program_state, Mat4.translation(-100, 0, 0).times(Mat4.rotation(Math.PI / 2, 0, 1, 0)).times(Mat4.scale(100, 100, 1)), materials[2])
@@ -641,27 +642,18 @@ function drawSkybox(context, program_state, shape, materials, shadow_pass) {
 }
 
 
-function drawWall(context, program_state, shape, wallMaterial, wallDimensions, textureScale = 1, shadow_pass) {
-    const [wallWidth, wallHeight, wallDepth] = wallDimensions;
-    const skyboxBoundary = 100;
-    const halfDepth = wallDepth / 2; // Half depth of the wall for proper alignment
-
-    // Calculate positions for each wall segment
-    const positions = [
-        { position: Mat4.translation(skyboxBoundary, wallHeight/3 , 100), rotation: 0 }, // Left wall
-        { position: Mat4.translation(skyboxBoundary, wallHeight / 3, -100), rotation: 0 }, // Right wall
-        { position: Mat4.translation(100, wallHeight / 3, skyboxBoundary), rotation: Math.PI / 2 }, // Front wall
-        { position: Mat4.translation(-100, wallHeight / 3, skyboxBoundary), rotation: -Math.PI / 2 }, // Back wall
-    ];
-
-    // Draw each wall segment
-    positions.forEach(pos => {
-        const scale = Mat4.scale(2 * skyboxBoundary * textureScale, wallHeight / 2, halfDepth);
-        const transformation = pos.position.times(Mat4.rotation(pos.rotation, 0, 1, 0)).times(scale);
-        console.time("Draws Walls")
-        shape.draw(context, program_state, transformation, wallMaterial);
-        console.timeEnd("Draws Walls")
-    });
+function drawWall(context, program_state, shape, wallMaterial, shadow_pass) {
+  
+    console.time("Draws Walls")
+    if (shadow_pass)
+    {
+        shape.draw(context, program_state, Mat4.translation(0, -0.2, -100).times(Mat4.scale(100, 10, 1)), wallMaterial); // Front wall
+        shape.draw(context, program_state, Mat4.translation(0, -0.2, 100).times(Mat4.scale(100, 10, 1)), wallMaterial); // Back wall
+        shape.draw(context, program_state, Mat4.translation(-100, -0.2, 0).times(Mat4.scale(1, 10, 100)), wallMaterial); // left wall
+        shape.draw(context, program_state, Mat4.translation(100, -0.2, 0).times(Mat4.scale(1, 10, 100)), wallMaterial); // right wall
+    
+    }
+    console.timeEnd("Draws Walls")
 }
 
 
@@ -692,7 +684,7 @@ class ZoomedOutTextureCube extends Cube {
         super(); // Call the constructor of the Cube class
 
         this.arrays.texture_coord = [
-            ...this.arrays.texture_coord.map(coord => vec(coord[0] *2, coord[1] *10))
+            ...this.arrays.texture_coord.map(coord => vec(coord[0] *20, coord[1] *2))
         ];
     }
 }
@@ -707,7 +699,7 @@ export class Project extends Scene {
             sphere: new Subdivision_Sphere(4),
             bounding_box: new Cube_Outline(),
             ground: new Cube(),
-            zoomedBox : new ZoomedOutTextureCube(),
+            zoomedSquare : new ZoomedOutTextureCube(),
             axis: new Axis_Arrows(),
             square: new Square(),
             tree: new Shape_From_File("assets/CommonTree_1.obj"),
@@ -732,7 +724,7 @@ export class Project extends Scene {
             powerup_multishot: new Text_Line(50),
             game_complete: new Text_Line(50),
         }
-        this.wallDimensions = [10, 10, 10];
+        // this.wallDimensions = [10, 10, 10];
 
         this.materials = {
             balloon: new Material(new Phong_Shader(), {
@@ -854,13 +846,16 @@ export class Project extends Scene {
             */
 
             wall: new Material(new Shadow_Textured_Phong_Shader(1), {
-                color: hex_color("#53350A"), ambient: 0.4, diffusivity: 0.4, specularity: 0.4,
-                color_texture: new Texture("assets/Wallstone.png", "REPEAT"), // Using REPEAT for texture wrap
-                light_depth_texture: null
+                // color: hex_color("#53350A"), 
+                ambient: .8, diffusivity: 0.4, specularity: 0.4,
+                color_texture: new Texture("assets/wall2.png", "NEAREST"),
+                light_depth_texture: 1
             })
 
 
         }
+
+
 
 
         this.projectiles = [];
@@ -880,10 +875,10 @@ export class Project extends Scene {
             new Nature(Mat4.translation(0, -0.1, 50), Mat4.scale(0.5, 0.6, 2), this.shapes.log, this.materials.log, this.materials.shadow, Mat4.translation(0, -0.1, -0.4)),
             new Nature(Mat4.translation(85, 5, -90).times(Mat4.rotation(-Math.PI / 2, 1, 0 , 0)).times(Mat4.rotation(Math.PI / 2, 0, 0, 1)).times(Mat4.scale(5, 5, 5,)), Mat4.scale(5.5, 6, 5.5,), this.shapes.castle, this.materials.castle, this.materials.shadow, Mat4.translation(0, 0, 0)),
             // Walls
-            new Nature(Mat4.translation(0, 0, 100).times(Mat4.scale(0, 0, 0)), Mat4.scale(100, 8.5, 5,), this.shapes.bounding_box, this.materials.tree, this.materials.shadow, Mat4.translation(0, 0, 0)),
-            new Nature(Mat4.translation(0, 0, -100).times(Mat4.scale(0, 0, 0)), Mat4.scale(100, 8.5, 5,), this.shapes.bounding_box, this.materials.tree, this.materials.shadow, Mat4.translation(0, 0, 0)),
-            new Nature(Mat4.translation(-100, 0, 0).times(Mat4.scale(0, 0, 0)), Mat4.scale(5, 8.5, 100,), this.shapes.bounding_box, this.materials.tree, this.materials.shadow, Mat4.translation(0, 0, 0)),
-            new Nature(Mat4.translation(100, 0, 0).times(Mat4.scale(0, 0, 0)), Mat4.scale(5, 8.5, 100,), this.shapes.bounding_box, this.materials.tree, this.materials.shadow, Mat4.translation(0, 0, 0)),
+            new Nature(Mat4.translation(0, -0.2, 100).times(Mat4.scale(0, 0, 0)), Mat4.scale(100, 10, 1,), this.shapes.bounding_box, this.materials.tree, this.materials.shadow, Mat4.translation(0, 0, 0)),
+            new Nature(Mat4.translation(0, -0.2, -100).times(Mat4.scale(0, 0, 0)), Mat4.scale(100, 10, 1,), this.shapes.bounding_box, this.materials.tree, this.materials.shadow, Mat4.translation(0, 0, 0)),
+            new Nature(Mat4.translation(-100, -0.2, 0).times(Mat4.scale(0, 0, 0)), Mat4.scale(1, 10, 100,), this.shapes.bounding_box, this.materials.tree, this.materials.shadow, Mat4.translation(0, 0, 0)),
+            new Nature(Mat4.translation(100, -0.2, 0).times(Mat4.scale(0, 0, 0)), Mat4.scale(1, 10, 100,), this.shapes.bounding_box, this.materials.tree, this.materials.shadow, Mat4.translation(0, 0, 0)),
 
 
         ];
@@ -1244,7 +1239,8 @@ export class Project extends Scene {
 
         drawTerrain(context, program_state, this.shapes.ground, shadow_pass ? this.materials.terrain : this.materials.pure);
         drawSkybox(context, program_state, this.shapes.square, [this.materials.skybox_top, this.materials.skybox_front, this.materials.skybox_left, this.materials.skybox_right, this.materials.skybox_back], shadow_pass );
-        drawWall(context, program_state, this.shapes.zoomedBox, shadow_pass ? this.materials.wall : this.materials.pure, this.wallDimensions, 1);
+        drawWall(context, program_state, this.shapes.zoomedSquare, this.materials.wall, shadow_pass);
+        
 
         this.drawHUD(context, program_state, shadow_pass)
 
