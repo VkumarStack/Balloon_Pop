@@ -80,7 +80,8 @@ const createHandLandmarker = async () => {
         delegate: "GPU"
       },
       runningMode: runningMode,
-      numHands: 1
+      numHands: 1,
+      min_tracking_confidence: 0.3
     });
 };
 createHandLandmarker();
