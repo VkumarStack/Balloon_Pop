@@ -1334,7 +1334,7 @@ export class Project extends Scene {
 
         console.time("Draws natures")
         this.nature.forEach((nature) => {
-            nature.draw(context, program_state, this.projectiles, shadow_pass, this.shapes.bounding_box, this.materials.bound_box)
+            nature.draw(context, program_state, this.projectiles, shadow_pass)
         })
         console.timeEnd("Draws natures")
 
