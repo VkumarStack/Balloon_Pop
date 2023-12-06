@@ -118,8 +118,7 @@ function enableCam(event, shootFunction) {
 }
 
 function inFiringPosition(landmarks) {
-    // This determines whether a finger that is not the thumb is closed by determining the distance of the finger tip from the 
-    // wrist, normalized by the distance of the wrist to the MCP joint of that finger
+   // Firing position if all fingers except for index and thumb are closed
     
     let tips = [12, 16, 20]
     let mcps = [9, 13, 17]
@@ -152,7 +151,7 @@ function isFiring(landmarks) {
         distance += (indexMCP[key] - thumbTip[key])**2
     })
 
-    console.log("DISTANCE " + distance * 100)
+
     return distance * 100 <= 1
 }
 
@@ -183,7 +182,8 @@ function isFiringAlternate(landmarks) {
    return Math.sqrt(tipLength) / Math.sqrt(MCPlength) <= 1.0
 }
 
-
+let framesHandsNotVisible = 0;
+let framesInFiringPosition = 0;
 let lastVideoTime = -1;
 let results = undefined;
 async function predictWebcam(shootFunction) {
@@ -198,6 +198,7 @@ async function predictWebcam(shootFunction) {
     results = handLandmarker.detectForVideo(video, startTimeMs);
   }
   if (results.landmarks.length != 0) {
+    framesHandsNotVisible = 0;
     const index = results.landmarks[0]["8"]
     const observation = [index.x, index.y, index.z]
     const predicted = kFilter.predict({
@@ -210,7 +211,13 @@ async function predictWebcam(shootFunction) {
 
     if (inFiringPosition(results.landmarks) && (isFiring(results.landmarks)))
     {   
-        shootFunction()
+        framesInFiringPosition += 1;
+        if (framesInFiringPosition >= 3)
+            shootFunction()
+    }
+    else 
+    {
+        framesInFiringPosition = 0;
     }
     if (previousCorrected !== null && inFiringPosition(results.landmarks))
     {
@@ -225,6 +232,14 @@ async function predictWebcam(shootFunction) {
         dy = 0;
     }
     previousCorrected = correctedState;
+    }
+    else 
+    {
+        framesHandsNotVisible += 1;
+        if (framesHandsNotVisible >= 5) {
+            dx = 0;
+            dy = 0;
+        }
     }
     
   // Call this function again to keep predicting when the browser is ready.
@@ -802,31 +817,37 @@ export class Project extends Scene {
             tree: new Material(new Tree_Shader(), {
                 leaf: hex_color("#77a37a"),
                 stump: hex_color("#53350A"), 
+                ambient: 0.2,
                 ycutoff: 0.1
             }),
             tree2: new Material(new Tree_Shader(), {
                 leaf: hex_color("#5f926a"),
                 stump: hex_color("#53350A"), 
+                ambient: 0.2,
                 ycutoff: -0.2
             }),
             tree3: new Material(new Tree_Shader(), {
                 leaf: hex_color("#587e60"),
                 stump: hex_color("#53350A"), 
+                ambient: 0.2,
                 ycutoff: -0.6
             }),
             tree4: new Material(new Tree_Shader(), {
                 leaf: hex_color("#485e52"),
                 stump: hex_color("#53350A"), 
+                ambient: 0.2,
                 ycutoff: -0.3
             }),
             tree5: new Material(new Tree_Shader(), {
                 leaf: hex_color("#3a4f3f"),
                 stump: hex_color("#53350A"), 
+                ambient: 0.2, 
                 ycutoff: 0.1
             }),
             willow: new Material(new Tree_Shader(), {
                 leaf: hex_color("#3A5F0B"),
                 stump: hex_color("#53350A"), 
+                ambient: 0.2, 
                 ycutoff: -0.6
             }),
             birch: new Material(new Tree_Shader(), {
@@ -844,7 +865,8 @@ export class Project extends Scene {
                 ambient: 0.2,
             }),
             log: new Material(new Phong_Shader(), {
-                color: hex_color("#635946")
+                color: hex_color("#635946"),
+                ambient: 0.3,
             }),
             flower: new Material(new Phong_Shader(), {
                 color: hex_color("#17661d"),
