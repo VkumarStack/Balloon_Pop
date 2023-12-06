@@ -86,6 +86,9 @@ const createHandLandmarker = async () => {
 };
 createHandLandmarker();
 
+// Collision Statistics
+let collisionTimes = 0
+
 // Check if webcam access is supported.
 const hasGetUserMedia = () => !!navigator.mediaDevices?.getUserMedia;
 
@@ -369,6 +372,106 @@ class Movement extends defs.Movement_Controls {
     }
 }
 
+// Dedicated class to describe movements of objects on scenes
+// Remark: for now this is a rough prototype with NO ERROR HANDLING and optimization.
+class Path {
+    constructor(initial_pos) {
+        this.intervals = [];
+        this.initial_pos = initial_pos;
+    }
+
+    // formula returns Mat4.transformation
+    addInterval(start, end, formula) {
+        this.intervals.push(new Interval(start, end, formula));
+    }
+
+    // For now the method assumes intervals are consecutive and sorted
+    pick(progress) {
+        let matrix = this.initial_pos;
+        for (let i = 0; i < this.intervals.length; i++) {
+            matrix = this.intervals[i].pick(progress, matrix).times(matrix);
+            if (progress <= this.intervals[i].end)
+                return matrix;
+        }
+    }
+
+    start() {
+        return this.intervals[0].start;
+    }
+
+    end() {
+        return this.intervals[this.intervals.length - 1].end;
+    }
+
+    // Higher dp guarantees higher precision
+    buildCluster(dp = .05, error = 0.0001) {
+        if (this.intervals.length == 0)
+            return null;
+        
+        let progress = this.start();
+        let intervalID = 0;
+        let clusters = [];
+        let min_x = Number.POSITIVE_INFINITY, 
+            max_x = Number.NEGATIVE_INFINITY, 
+            min_y = Number.POSITIVE_INFINITY, 
+            max_y = Number.NEGATIVE_INFINITY,
+            min_z = Number.POSITIVE_INFINITY, 
+            max_z = Number.NEGATIVE_INFINITY;
+
+        let matrix = this.initial_pos;
+        while (progress + error <= this.end()) {
+            const temp_tran = this.intervals[intervalID].pick(progress + error, matrix);
+            const temp_matrix = temp_tran.times(matrix);
+
+            min_x = Math.min(min_x, temp_matrix[0][3]);
+            min_y = Math.min(min_y, temp_matrix[1][3]);
+            min_z = Math.min(min_z, temp_matrix[2][3]);
+            max_x = Math.max(max_x, temp_matrix[0][3]);
+            max_y = Math.max(max_y, temp_matrix[1][3]);
+            max_z = Math.max(max_z, temp_matrix[2][3]);
+
+            progress += dp;
+            if (progress + error > this.intervals[intervalID].end) {
+                intervalID += 1;
+                matrix = temp_tran.times(matrix);   // Cache the matrix
+
+                clusters.push(new BalloonCluster([
+                    min_x - .7, max_x + .7, min_y - .7, max_y + .7, min_z - .7, max_z + .7
+                ]));
+                
+                min_x = Number.POSITIVE_INFINITY;
+                max_x = Number.NEGATIVE_INFINITY;
+                min_y = Number.POSITIVE_INFINITY;
+                max_y = Number.NEGATIVE_INFINITY;
+                min_z = Number.POSITIVE_INFINITY;
+                max_z = Number.NEGATIVE_INFINITY;
+            }
+        }
+
+        return clusters;
+    }
+}
+
+// A subpath
+class Interval {
+    constructor(start, end, formula) {
+        this.start = start;
+        this.end = end;
+        this.formula = formula;
+    }
+
+    pick(progress, matrix) {
+        if (progress < this.start)
+            console.error("Incorrect progress: %.3f, %.3f-%.3f", progress, this.start, this.end);
+        else {
+            const stageTime = 
+                Math.min(this.end - this.start, progress - this.start);
+            const compute = this.formula(stageTime, matrix);
+            return compute;
+        }
+    }
+}
+
 // Objects that have a collision box should extend this class
 // Matrix is the Mat4 matrix that represents the object's position, scaling, rotation, etc.
 // Size is the size of the bounding box of the object, represented as a Mat4 scale only (do not rotate or translate the size matrix)
@@ -401,7 +504,7 @@ class Collidable {
     }
 
     checkCollision(other) {
-        console.time("Collision checking")
+        collisionTimes += 1
 
         let test;
         if (this.boundingBox && other.boundingBox) // Box-Box collision
@@ -448,8 +551,6 @@ class Collidable {
                 this.handleCollision(other);
             }
         }
-
-        console.timeEnd("Collision checking")
 
         return test;
     }
@@ -510,6 +611,122 @@ class Projectile extends Collidable {
 
 }
 
+// Clusters generation
+let matrices = [
+    [-100.7, -94.320408, -0.7, 10.618534594585608, -0.7, 0.7],
+    [-95.66775, -81.84021999999997, 9.3, 10.7, -0.7, 0.7],
+    [
+    -83.15690999999998, -3.356424999999919, 9.3, 10.7,
+    -3.1999920102026698, 3.199973888841944,
+    ],
+    [
+    -4.699907794741054, 46.69988392120507, 9.3, 10.7,
+    -25.739604294753025, 25.66014936880033,
+    ],
+    [
+    -4.699998781059446, 21.609522329090687, 9.3, 10.7,
+    24.26040620567531, 75.66002161878498,
+    ],
+    [20.3, 21.7, 9.3, 10.7, 74.28086134350032, 85.62312134350042],
+    [
+    -69.67243200000088, 21.670167999999318, 9.3, 10.7,
+    83.26019702864511, 86.66018525678675,
+    ],
+    [-69.7, -68.3, 9.3, 10.7, 85.14988886803475, 96.49405286803527],
+    [
+    -69.64838399999861, 91.68417600000141, 9.3, 10.7, 94.11109684383285,
+    97.51108836709231,
+    ],
+    [
+    90.3, 91.7, 7.300026230675379, 12.699999999945643,
+    -94.3612157858916, 95.46632021410906,
+    ],
+    [
+    90.32259600000104, 96.6935760000007, -0.6698797261497436,
+    10.704236549277036, -94.38279978588952, -92.98279978588951,
+    ],
+];
+
+// Auxillary Class to optimize Collisions
+class BalloonCluster extends Collidable {
+  static clusters = [
+    new BalloonCluster(matrices[0]),
+    new BalloonCluster(matrices[1]),
+    new BalloonCluster(matrices[2]),
+    new BalloonCluster(matrices[3]),
+    new BalloonCluster(matrices[4]),
+    new BalloonCluster(matrices[5]),
+    new BalloonCluster(matrices[6]),
+    new BalloonCluster(matrices[7]),
+    new BalloonCluster(matrices[8]),
+    new BalloonCluster(matrices[9]),
+    new BalloonCluster(matrices[10]),
+  ];
+
+  static progressLookup(progress) {
+    for (let i = 0; i < this.path.intervals.length; i++) {
+        const interval = this.path.intervals[i];
+        if (progress >= interval.start && progress <= interval.end)
+            return this.clusters[i];
+    }
+
+    // If progress is larger than path.end(), it should have reanched the end
+  }
+
+  static setClusters(path) {
+    this.path = path;
+    this.clusters = path.buildCluster();
+  }
+
+  constructor(matrix, collidables=[]) {
+    super(matrix, 0);
+    this.balloons = new Set()
+    this.collidables = collidables;
+    this.updateBoundBox();
+  }
+
+  updateBoundBox() {
+    this.min_x = this.matrix[0];
+    this.max_x = this.matrix[1];
+    this.min_y = this.matrix[2];
+    this.max_y = this.matrix[3];
+    this.min_z = this.matrix[4];
+    this.max_z = this.matrix[5];
+  }
+
+  addChild(child) {
+    this.balloons.add(child);
+  }
+
+  updateCollidables(collidables) {
+    this.collidables = collidables
+  }
+
+  checkCollisions() {
+        this.collidables.forEach((collidable) => {
+        this.checkCollision(collidable);
+        });
+  }
+
+  checkCollision(other) {
+    // Check for collision with any projectiles
+    let test = false;
+    test = super.checkCollision(other);
+
+    // Test balloons boxes if hit
+    if (test) {
+        this.balloons.forEach((balloon) => {
+            balloon.checkCollision(other);
+        });
+    }
+  }
+
+  clear() {
+    // Clear the current array
+    this.balloons.length = 0;
+  }
+}
+
 class Balloon extends Collidable {
     constructor(size, initial_pos, durability, speed, shape, material, shadow) 
     {
@@ -527,6 +744,68 @@ class Balloon extends Collidable {
 
         // Balloons will follow a fixed path, and how exactly it moves on this path will be based on this progress range
         this.progress = 0;
+
+        // Update Path
+        const stage1 = (stageTime, matrix) =>
+            Mat4.translation(stageTime, (stageTime * stageTime * 10) / 25, 0);
+        const stage2 = (stageTime, matrix) => 
+            Mat4.translation(2.5 * stageTime, 0, 0);
+        const stage3 = (stageTime, matrix) =>
+          Mat4.translation(2.5 * stageTime, 0, 2.5 * Math.sin(stageTime));
+        const stage4 = (stageTime, matrix) => {
+            let n_stageTime = stageTime * (Math.PI * 3 / 2 / (60 - 41.4));
+            return Mat4.translation(matrix[0][3] + 25, matrix[1][3], matrix[2][3]).times(Mat4.rotation(-n_stageTime, 0, 1, 0))
+              .times(
+                Mat4.translation(
+                  -(matrix[0][3] + 25),
+                  -matrix[1][3],
+                  -matrix[2][3]
+                )
+              );
+        }
+        const stage5 = (stageTime, matrix) => {
+            let n_stageTime = stageTime * (Math.PI / (80 - 60));
+            return Mat4.translation(matrix[0][3], matrix[1][3], matrix[2][3] + 25)
+              .times(Mat4.rotation(n_stageTime, 0, 1, 0))
+              .times(
+                Mat4.translation(
+                  -matrix[0][3],
+                  -matrix[1][3],
+                  -(matrix[2][3] + 25)
+                )
+              );
+        }
+        const stage6 = (stageTime, matrix) =>
+          Mat4.translation(0, 0, stageTime * 2);
+        const stage7 = (stageTime, matrix) =>
+          Mat4.translation(-stageTime * 2, 0, Math.sin(stageTime));
+        const stage8 = (stageTime, matrix) =>
+          Mat4.translation(0, 0, stageTime * 2);
+        const stage9 = (stageTime, matrix) =>
+          Mat4.translation(stageTime * 2, 0, Math.sin(stageTime));
+        const stage10 = (stageTime, matrix) =>
+          Mat4.translation(0, 2 * Math.sin(stageTime), -2 * stageTime);
+        const stage11 = (stageTime, matrix) =>
+          Mat4.translation(
+            stageTime,
+            (-stageTime * stageTime * 10) / 25,
+            0
+          );
+
+        this.path = new Path(this.initial_pos);
+        this.path.addInterval(0, 5, stage1);
+        this.path.addInterval(5, 10, stage2);
+        this.path.addInterval(10, 41.4, stage3);
+        this.path.addInterval(41.4, 60, stage4);
+        this.path.addInterval(60, 80, stage5);
+        this.path.addInterval(80, 85, stage6);
+        this.path.addInterval(85, 130, stage7);
+        this.path.addInterval(130, 135, stage8);
+        this.path.addInterval(135, 207.5, stage9);
+        this.path.addInterval(207.5, 301.75, stage10);
+        this.path.addInterval(301.75, 306.75, stage11);
+
+        BalloonCluster.setClusters(this.path);
     }
 
     draw(context, program_state, dt, collidables, shadow_pass) 
@@ -534,70 +813,18 @@ class Balloon extends Collidable {
         this.progress += dt * this.speed;
 
         // Stages represent its stages of motion - i.e. parabolic, sinusoidal, circular, etc.
-        const stage1Time = Math.min(5, this.progress) // 0 <= t <= 5
-        let matrix = Mat4.translation(stage1Time, stage1Time * stage1Time * 10 / 25, 0).times(this.initial_pos)
-        if (this.progress >= 5) // 5 <= t <= 10
-        {
-            const stage2Time = Math.min(10 - 5, this.progress - 5)
-            matrix = Mat4.translation(2.5 * stage2Time, 0, 0).times(matrix)
-        }
-        if (this.progress >= 10) // 10 <= t <= 41.4
-        {
-            const stage3Time = Math.min(41.4 - 10, this.progress - 10)
-            matrix = Mat4.translation(2.5 * stage3Time, 0, 2.5 * Math.sin(stage3Time)).times(matrix)
-        }
-        if (this.progress >= 41.4) // 41. 4 <= t <= 60
-        {
-            const stage4Time = Math.min(60 - 41.4, this.progress - 41.4) * (Math.PI * 3 / 2 / (60 - 41.4))
-            matrix = Mat4.translation(matrix[0][3] + 25, matrix[1][3], matrix[2][3]).times(Mat4.rotation(-stage4Time, 0, 1, 0)).times(Mat4.translation(-(matrix[0][3] + 25), -matrix[1][3], -matrix[2][3])).times(matrix)
-        }
-        if (this.progress >= 60) // 60 <= t <= 80
-        {
-            const stage5Time = Math.min(80 - 60, this.progress - 60) * (Math.PI / (80 - 60))
-            matrix = Mat4.translation(matrix[0][3], matrix[1][3], matrix[2][3] + 25).times(Mat4.rotation(stage5Time, 0, 1, 0)).times(Mat4.translation(-matrix[0][3], -matrix[1][3], -(matrix[2][3] + 25))).times(matrix)
-        }
-        if (this.progress >= 80) // 80 <= t <= 85
-        {
-            const stage6Time = Math.min(85 - 80, this.progress - 80)
-            matrix = Mat4.translation(0, 0, stage6Time * 2).times(matrix)
-        }
-        if (this.progress >= 85) // 85 <= t <= 130
-        {
-            const stage7Time = Math.min(130 - 85, this.progress - 85)
-            matrix = Mat4.translation(-stage7Time * 2, 0, Math.sin(stage7Time)).times(matrix)
-        }
-        if (this.progress >= 130) // 130 <= t <= 135
-        {
-            const stage8Time = Math.min(135 - 130, this.progress - 130)
-            matrix = Mat4.translation(0, 0, stage8Time * 2).times(matrix)
-        }
-        if (this.progress >= 135) // 135 <= t <= 207.5
-        {
-            const stage9Time = Math.min(207.5 - 135, this.progress - 135)
-            matrix = Mat4.translation(stage9Time * 2, 0, Math.sin(stage9Time)).times(matrix)
-        }
-        if (this.progress >= 207.5) // 207.5 <= t <= 301.75
-        {
-            const stage10Time = Math.min(301.75 - 207.5, this.progress - 207.5)
-            matrix = Mat4.translation(0, 2 * Math.sin(stage10Time), -2 * stage10Time).times(matrix)
-        }
-        if (this.progress >= 301.75) // 301.75 <= t <= 306.75
-        {
-            const stage11Time = Math.min(306.75 - 301.75, this.progress - 301.75)
-            matrix = Mat4.translation(stage11Time, -stage11Time * stage11Time * 10 / 25, 0).times(matrix)
-        }
-        if (this.progress >= 306.75)
+        if (this.progress + 0.001 > this.path.end()) {
             this.reachedEnd = true;
+        }
 
-        this.updateMatrix(matrix)
+        if (!this.reachedEnd) {
+          const matrix = this.path.pick(this.progress);
+          this.updateMatrix(matrix);
+
+          // Add to Balloon Clusters
+          BalloonCluster.progressLookup(this.progress).addChild(this);
+        }
         
-        // Check for collision with any projectiles
-        let collided = false;
-        collidables.forEach((collidable) => {
-            if (this.checkCollision(collidable)) {
-                collided = true;
-            }
-        })
         this.shape.draw(context, program_state, this.matrix.times(this.size), shadow_pass ? this.material.override(BALLOON_HEALTH[this.durability]) : this.shadow)
     }
 
@@ -1333,6 +1560,7 @@ export class Project extends Scene {
         
         console.time("Draws balloons")
         console.log("# Balloons: %d", this.balloons.length)
+
         for (let i = 0; i < this.balloons.length; i++)
         {
             if (this.balloons[i].durability != 0 && !this.balloons[i].reachedEnd)
@@ -1447,6 +1675,13 @@ export class Project extends Scene {
 
         program_state.lights = [new Light(this.light_position, this.light_color, 100000)];
 
+        // Cluster Collision Test
+        for (let i = 0; i < BalloonCluster.clusters.length; i++) {
+            let cluster = BalloonCluster.clusters[i];
+            cluster.updateCollidables(this.projectiles)
+            cluster.checkCollisions()
+        }
+
         console.timeEnd("Initialization")
 
 
@@ -1482,6 +1717,23 @@ export class Project extends Scene {
         this.render_scene(context, program_state, true, true, true);
 
         console.timeEnd("Step 2")
+
+        // Clear balloon clusters
+        for (let i = 0; i < BalloonCluster.clusters.length; i++)
+            BalloonCluster.clusters[i].clear();
+        
+        console.log("Times of Collision Checks: %d", collisionTimes);
+        collisionTimes = 0;
+
+        /*
+        // Step 3: display the textures
+        this.shapes.ground.draw(context, program_state,
+            Mat4.translation(-.99, .08, 0).times(
+            Mat4.scale(0.5, 0.5 * gl.canvas.width / gl.canvas.height, 1)
+            ),
+            this.depth_tex.override({texture: this.lightDepthTexture})
+        );
+        */
     }
 }
 
