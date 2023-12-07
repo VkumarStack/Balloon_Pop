@@ -149,14 +149,13 @@ function inFiringPosition(landmarks) {
 
 function isFiring(landmarks) {
     let thumbTip = landmarks[0][4]
-    let indexMCP = landmarks[0][5]
+    let middlePIP = landmarks[0][10]
     let distance = 0
     Object.keys(thumbTip).forEach((key) => {
-        distance += (indexMCP[key] - thumbTip[key])**2
+        distance += (middlePIP[key] - thumbTip[key])**2
     })
 
-
-    return distance * 100 <= 1
+    return distance * 100 <= 0.5
 }
 
 
@@ -350,7 +349,6 @@ class Movement extends defs.Movement_Controls {
     }
 
     display (context, graphics_state, dt= graphics_state.animation_delta_time / 1000) {
-        console.time("Movement display")
         const m  = this.speed_multiplier * this.meters_per_frame,
               r  = this.speed_multiplier * this.radians_per_frame
 
@@ -368,7 +366,6 @@ class Movement extends defs.Movement_Controls {
         this.first_person_flyaround (dt * r, dt * m);
         if (!this.mouse.anchor)
             this.third_person_arcball(dt * r);
-        console.timeEnd("Movement display")
     }
 }
 
@@ -884,14 +881,11 @@ class Nature extends Collidable {
 }
 
 function drawTerrain(context, program_state, shape, material) {
-    console.time("Draws terrain")
     // Have the terrain by a large cube with its top face being stood on
     shape.draw(context, program_state, Mat4.translation(0, -2, 0).times(Mat4.scale(100, 1, 100)), material);
-    console.timeEnd("Draws terrain")
 }
 
 function drawSkybox(context, program_state, shape, materials, shadow_pass) {
-    console.time("Draws skybox")
     if (shadow_pass)
     {
 
@@ -901,18 +895,15 @@ function drawSkybox(context, program_state, shape, materials, shadow_pass) {
         shape.draw(context, program_state, Mat4.translation(100, 0, 0).times(Mat4.rotation(-Math.PI / 2, 0, 1, 0)).times(Mat4.scale(100, 100, 1)), materials[3])
         shape.draw(context, program_state, Mat4.translation(0, 0, 100).times(Mat4.scale(100, 100, 1)).times(Mat4.rotation(Math.PI, 0, 1, 0)), materials[4])
     }
-    console.timeEnd("Draws skybox")
 }
 
 
 function drawWall(context, program_state, shape,wallMaterial) {
   
-    console.time("Draws Walls")
     shape.draw(context, program_state, Mat4.translation(0, -0.2, -100).times(Mat4.scale(100, 10, 1)), wallMaterial); // Front wall
     shape.draw(context, program_state, Mat4.translation(0, -0.2, 100).times(Mat4.scale(100, 10, 1)), wallMaterial); // Back wall
     shape.draw(context, program_state, Mat4.translation(-100, -0.2, 0).times(Mat4.scale(1, 10, 100)), wallMaterial); // left wall
     shape.draw(context, program_state, Mat4.translation(100, -0.2, 0).times(Mat4.scale(1, 10, 100)), wallMaterial); // right wall
-    console.timeEnd("Draws Walls")
 }
 
 
@@ -1268,7 +1259,6 @@ export class Project extends Scene {
             }
             else if (this.balloons.length == 0) // Do not start new wave until all current balloons are despawned
             {
-                console.log("WAVE INFORMATION" + JSON.stringify(WAVE_INFORMATION))
                 this.currentBalloons = null;
                 this.currentWave += 1
                 setTimeout(this.spawnBalloons.bind(this), 5000)
@@ -1352,7 +1342,6 @@ export class Project extends Scene {
             }
         })
         this.key_triggered_button("Upgrade Projectile Speed", ["i"], () => {
-            console.log("Projectile Speed: " + this.projectileSpeedPrices[this.projectileSpeedTier])
             if (this.projectileSpeedTier != this.projectileSpeedPrices.length && this.money >= this.projectileSpeedPrices[this.projectileSpeedTier]) {
                 this.money -= this.projectileSpeedPrices[this.projectileSpeedTier]
                 this.projectileSpeedTier += 1
@@ -1537,15 +1526,12 @@ export class Project extends Scene {
 
         program_state.draw_shadow = draw_shadow;
 
-        console.time("Draws light-src")
         if (draw_light_source && shadow_pass) {
             this.shapes.sphere.draw(context, program_state,
                 Mat4.translation(light_position[0], light_position[1], light_position[2]).times(Mat4.scale(1,1,1)),
                 this.materials.light_src.override({color: hex_color("#FC9601")}));
         }
-        console.timeEnd("Draws light-src")
 
-        console.time("Draws projectiles")
         for (let i = 0; i < this.projectiles.length; i++)
         {
             if (this.projectiles[i].durability != 0 && !this.projectiles[i].out_of_bounds)
@@ -1556,10 +1542,6 @@ export class Project extends Scene {
                 i--;
             }
         }
-        console.timeEnd("Draws projectiles")
-        
-        console.time("Draws balloons")
-        console.log("# Balloons: %d", this.balloons.length)
 
         for (let i = 0; i < this.balloons.length; i++)
         {
@@ -1567,7 +1549,6 @@ export class Project extends Scene {
                 this.balloons[i].draw(context, program_state, dt, this.projectiles, shadow_pass)
             else
             {
-                console.time("Balloons Array Splicing")
                 if (this.balloons[i].reachedEnd)
                 {
                     this.health = Math.max(this.health - (this.balloons[i].durability - this.balloons[i].collidedObjects.size), 0)
@@ -1578,19 +1559,14 @@ export class Project extends Scene {
                     this.money += this.balloons[i].originalHealth;
                 this.balloons.splice(i, 1);
                 i--;
-                console.timeEnd("Balloons Array Splicing")
             }
         } 
-        console.timeEnd("Draws balloons")
 
-        console.time("Draws natures")
         this.nature.forEach((nature) => {
             nature.draw(context, program_state, this.projectiles, shadow_pass)
         })
-        console.timeEnd("Draws natures")
 
     
-        console.time("Draws castle health")
         if (this.health > 0) {
             let timeInSeconds = t / 1000;
             let sineValue = Math.sin((timeInSeconds * Math.PI * 2) / 5);
@@ -1621,7 +1597,6 @@ export class Project extends Scene {
                 this.shapes.healthBall.draw(context, program_state, Mat4.translation(85.5, 17 + verticalMovement, -90).times(Mat4.scale(size, size, size)), this.materials.pure2.override({color: color}));
             }
         }
-        console.timeEnd("Draws castle health")
 
 
         drawTerrain(context, program_state, this.shapes.ground, shadow_pass ? this.materials.terrain : this.materials.pure);
@@ -1636,7 +1611,6 @@ export class Project extends Scene {
     }
 
     display(context, program_state) {
-        console.time("Initialization")
 
         if (!context.scratchpad.controls) {
             this.children.push(context.scratchpad.controls = new Movement(this.fireprojectile.bind(this)));
@@ -1646,7 +1620,6 @@ export class Project extends Scene {
         let t = program_state.animation_time / 1000, dt = program_state.animation_delta_time / 1000;
         const gl = context.context;
 
-        console.log(1 / dt)
 
         if (!this.init_ok) {
             const ext = gl.getExtension('WEBGL_depth_texture');
@@ -1682,10 +1655,6 @@ export class Project extends Scene {
             cluster.checkCollisions()
         }
 
-        console.timeEnd("Initialization")
-
-
-        console.time("Step 1")
 
         // Step 1: set the perspective and camera to the POV of light
         const light_view_mat = Mat4.look_at(
@@ -1706,8 +1675,6 @@ export class Project extends Scene {
         program_state.projection_transform = light_proj_mat;
         this.render_scene(context, program_state, false, false, false);
 
-        console.timeEnd("Step 1")
-        console.time("Step 2")
 
         // Step 2: unbind, draw to the canvas
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -1716,13 +1683,10 @@ export class Project extends Scene {
         program_state.projection_transform = Mat4.perspective(Math.PI / 4, context.width / context.height, 0.5, 500);
         this.render_scene(context, program_state, true, true, true);
 
-        console.timeEnd("Step 2")
-
         // Clear balloon clusters
         for (let i = 0; i < BalloonCluster.clusters.length; i++)
             BalloonCluster.clusters[i].clear();
         
-        console.log("Times of Collision Checks: %d", collisionTimes);
         collisionTimes = 0;
 
         /*
