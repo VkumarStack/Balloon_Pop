@@ -7,6 +7,8 @@ import {tiny} from './tiny-graphics.js';
 
 // Pull these names into this module's scope for convenience.
 const {color, Scene} = tiny;
+const width = Math.max(window.innerWidth * 0.95, 1200);
+const height = Math.max(window.innerHeight * 0.95, 600);
 
 export const widgets = {};
 
@@ -28,8 +30,8 @@ const Canvas_Widget = widgets.Canvas_Widget =
                 Object.assign(options, initial_scenes[0].widget_options);
             Object.assign(this, defaults, options)
 
-            const rules = [".canvas-widget { width: 1080px; background: White; margin:auto }",
-                ".canvas-widget canvas { width: 1080px; height: 600px; margin-bottom:-3px }"];
+            const rules = [`.canvas-widget { width: ${width}px; background: White; margin:auto }`,
+                `.canvas-widget canvas { width: ${width}px; height: ${height}px; margin-bottom:-3px }`];
 
             if (document.styleSheets.length == 0) document.head.appendChild(document.createElement("style"));
             for (const r of rules) document.styleSheets[document.styleSheets.length - 1].insertRule(r, 0)
@@ -47,20 +49,10 @@ const Canvas_Widget = widgets.Canvas_Widget =
                 this.embedded_controls_area.className = "controls-widget";
             }
 
-            if (this.make_code_nav) {
-                this.embedded_code_nav_area = this.element.appendChild(document.createElement("div"));
-                this.embedded_code_nav_area.className = "code-widget";
-            }
-
-            if (this.make_editor) {
-                this.embedded_editor_area = this.element.appendChild(document.createElement("div"));
-                this.embedded_editor_area.className = "editor-widget";
-            }
-
             if (!this.show_canvas)
                 canvas.style.display = "none";
 
-            this.webgl_manager = new tiny.Webgl_Manager(canvas, color(0, 0, 0, 1));
+            this.webgl_manager = new tiny.Webgl_Manager(canvas, color(0, 0, 0, 1), [width, height]);
             // Second parameter sets background color.
 
 
@@ -75,11 +67,6 @@ const Canvas_Widget = widgets.Canvas_Widget =
                 this.embedded_explanation = new Text_Widget(this.embedded_explanation_area, this.webgl_manager.scenes, this.webgl_manager);
             if (this.make_controls)
                 this.embedded_controls = new Controls_Widget(this.embedded_controls_area, this.webgl_manager.scenes);
-            if (this.make_editor)
-                this.embedded_editor = new Editor_Widget(this.embedded_editor_area, primary_scene_definiton, this);
-            if (this.make_code_nav)
-                this.embedded_code_nav = new Code_Widget(this.embedded_code_nav_area, primary_scene_definiton,
-                    additional_scenes, {associated_editor: this.embedded_editor});
 
             // Start WebGL initialization.  Note that render() will re-queue itself for continuous calls.
             this.webgl_manager.render();
@@ -93,7 +80,7 @@ const Controls_Widget = widgets.Controls_Widget =
         // Scene object, each providing interactive elements such as buttons with key
         // bindings, live readouts of Scene data members, etc.
         constructor(element, scenes) {
-            const rules = [".controls-widget * { font-family: monospace }",
+            const rules = [".controls-widget { display: flex; justify-content: center}", ".controls-widget * { font-family: monospace }",
                 ".controls-widget div { background: White }",
                 ".controls-widget table { border-collapse: collapse; display:block; overflow-x: auto; table-layout: fixed;}",
                 ".controls-widget table.control-box { width: 1080px; border:1px; margin:0; max-height:380px; " +

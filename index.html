@@ -6,68 +6,23 @@
 <head>
     <meta charset="UTF-8"/>
     <link href="assets/fav.ico" rel="icon">
-    <title>Tiny Graphics</title>
-    <style>
-        #game-container {
-            position: relative;
-            width: 1055px;  
-            height: 600px;
-            
-        }
-    
-        .crosshair {
-            position: absolute;
-            left: 50%; 
-            top: 50%; 
-            z-index: 5;
-            pointer-events: none;
-            width: 40px; 
-            height: 40px; 
-        }
-    </style>
+    <title>Balloon Pop</title>
 </head>
 <body style="background: White">
-    <div class="canvas-widget" id="main-canvas">
-        <div id="game-container">
-            <!-- Crosshair canvas -->
-            <canvas id="crosshair-canvas" class="crosshair"></canvas>
-        </div>
-    </div>
-    <script src="./kalman-filter.js"></script>
-    <script type=module>
-        const element_to_replace = document.querySelector("#game-container");
-        import {Main_Scene, Additional_Scenes, Canvas_Widget} from './main-scene.js';
-        const scenes = [Main_Scene, ...Additional_Scenes].map(scene => new scene());
-        new Canvas_Widget(element_to_replace, scenes);
-    </script>
-    <script> 
-        function initializeCrosshair() {
-            const crosshairCanvas = document.getElementById('crosshair-canvas');
-            const dpr = window.devicePixelRatio || 1;
-            crosshairCanvas.width = 20 * dpr;
-            crosshairCanvas.height = 20 * dpr;
-            crosshairCanvas.style.width = "40px";
-            crosshairCanvas.style.height = "40px";
-        
-            const ctx = crosshairCanvas.getContext('2d');
-            ctx.scale(dpr, dpr);
-        
-            // Draw a simple crosshair
-            ctx.beginPath();
-            ctx.moveTo(0, 5); 
-            ctx.lineTo(10, 5); 
-            ctx.moveTo(5, 0); 
-            ctx.lineTo(5, 10);
-            ctx.moveTo(5, 0);
-            ctx.strokeStyle = '#000000'; 
-            ctx.lineWidth = 2; 
-            ctx.stroke();
-            ctx.strokeStyle = '#ff0000'; 
-            ctx.lineWidth = 1; 
-            ctx.stroke();
-        }
+<!-- Begin typing your web page here. -->
+<!-- The following code embeds a WebGL canvas panel, loads certain scene(s), and displays panel(s) of their controls.-->
+<div class="canvas-widget" id="main-canvas"></div>
+<script src="./kalman-filter.js"></script>
+<script type=module>
+    // ********************* THE ENTRY POINT OF YOUR WHOLE PROGRAM STARTS HERE *********************
+    // Indicate which element on the page you want the Canvas_Widget to replace with a 3D WebGL area:
+    const element_to_replace = document.querySelector("#main-canvas");
+    import {Main_Scene, Additional_Scenes, Canvas_Widget} from './main-scene.js';
+    // Import the file that defines a scene.
+    const scenes = [Main_Scene, ...Additional_Scenes].map(scene => new scene());
+    // This line creates your scene.
+    new Canvas_Widget(element_to_replace, scenes);
+</script>
 
-        window.onload = initializeCrosshair;
-    </script>
 </body>
 </html>
