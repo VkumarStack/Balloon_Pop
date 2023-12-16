@@ -32,7 +32,7 @@ let pitch = 0; // Variables representing camera angle (left and right)
 let yaw = 0; // Up and down
 const TERRAIN_BOUNDS = vec3(100, 0, 100);
 // Colors for balloons at various positions of health (by their index)
-const BALLOON_HEALTH = [hex_color("#ff0000"), hex_color("#ff0000"), hex_color("#0092e3"), hex_color("#63a800"), hex_color("#ffd100"), hex_color("#ff2b51"), hex_color("#141414") ]
+const BALLOON_HEALTH = [hex_color("#ff0000"), hex_color("#ff0000"), hex_color("#0092e3"), hex_color("#63a800"), hex_color("#ffd100"), hex_color("#FF00FF"), hex_color("#141414") ]
 
 const WAVE_INFORMATION = [
     { balloons: [{1: 10}], balloon_speed: 0.5, spawn_interval: 3000 }, 
@@ -58,7 +58,7 @@ const kFilter = new KalmanFilter({
     dynamic: {
         name: 'constant-speed',
         timeStep: 0.1, 
-        covariance: [3, 3, 3, 4, 4, 4]
+        covariance: [1, 1, 1, 0.01, 0.01, 0.01],
     }
 })
 
@@ -1279,7 +1279,7 @@ export class Project extends Scene {
         this.projectilePierces = [1, 2, 3, 5, 10, 20]
         this.projectilePiercePrices = [10, 30, 60, 100, 500]
         this.projectileSpeedTier = 0;
-        this.projectileSpeeds = [1, 2, 3.5, 6]
+        this.projectileSpeeds = [1, 2, 3.5, 4.0]
         this.projectileSpeedPrices = [40, 100, 600]
         this.shootCooldownTier = 0;
         this.shootCooldowns = [1000, 500, 250, 100, 50];
@@ -1551,7 +1551,7 @@ export class Project extends Scene {
             {
                 if (this.balloons[i].reachedEnd)
                 {
-                    this.health = Math.max(this.health - (this.balloons[i].durability - this.balloons[i].collidedObjects.size), 0)
+                    this.health = Math.max(this.health - this.balloons[i].durability, 0)
                     if (this.health == 0)
                         this.game_over = true;
                 }
